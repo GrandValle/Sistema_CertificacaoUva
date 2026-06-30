@@ -5,27 +5,24 @@ import React, { useRef, useState, useId, useEffect } from "react";
 import { BiUser, BiTrash, BiUpload } from "react-icons/bi";
 
 const USERS = [
-    "Leandro Dias", "ADRIEL DOS S.SILVA", "Cesar frank", "ANTONIO JHEYSON SILVA ALVES",
-    "CARLIENE F DA SILVA", "CLEISON NUNES DE SOUZA", "CRISTIANE MARIA", "EDUARDO S. SILVA",
-    "ELIANE CRUZ SOUZA", "ELLEN VITORIA", "ERIC MARTINS ARAUJO", "EXPEDITO CARLOS",
-    "FABIOLA DOS S BARROS", "FABRICIA", "FABRICIO CASTRO", "FABRICIO SILVA RODRIGUES",
-    "FRANCINALDO F COELHO", "HIGO JULLYS", "JOSAPHA NUNES", "JOSE NEUTON",
-    "LAECIO DE SOUZA SOARES", "LEANDRO CASTRO", "LEIDIANE PASSOS", "LIDIA AMORIM BRITO",
-    "MARCIA MARIA DE MOURA SANTOS", "MARCIANA BRITO", "MATEUS CASTOR",
-    "MATEUS SILVA PEREIRA", "PEDRO GOMES", "PERLA NAIANE", "RAFAEL S OLIVEIRA",
-    "RONIER GUIMARAES SANTOS", "RONIERISON FERREIRA", "WAGNER DIAS ARAÚJO",
-    "Mailson Carvalho Santos", "Raivan Santos da Cruz",
+    "Anny Kethylen Mourão de Araujo",
+    "BRENDON PEREIRA DA SILVA NASCIMENTO",
+    "ELIANA AMORIM DE SANTANA",
+    "JOANA DARCK",
+    "NEILMA ALDENORA DA CONCEIÇÃO OLIVEIRA",
+    "EDINALDO CERQUEIRA AMORIM",
+    "JOÃO VITOR SANTOS SILVA"
 ];
 
-// Normaliza para comparação: minúsculo, sem acento, sem underline, sem espaços extras
 const normalizeCompare = (str: string) =>
     str
         .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "") // remove acentos
-        .replace(/_/g, " ") // underline vira espaço
-        .replace(/\s+/g, " ") // espaços múltiplos viram um só
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/_/g, " ")
+        .replace(/\s+/g, " ")
         .trim()
         .toLowerCase();
+
 const formatName = (str: string) => str.toLowerCase().replace(/(?:^|\s)\S/g, (a) => a.toUpperCase());
 
 interface Props {
@@ -40,57 +37,95 @@ export const SignatureSelector = ({ value, onChange }: Props) => {
     const [isMounted, setIsMounted] = useState(false);
     const listId = useId();
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     useEffect(() => { setIsMounted(true); }, []);
 
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) onChange(URL.createObjectURL(file));
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement("canvas");
+                const MAX_WIDTH = 400;
+                const scaleSize = MAX_WIDTH / img.width;
+                canvas.width = MAX_WIDTH;
+                canvas.height = img.height * scaleSize;
+
+                const ctx = canvas.getContext("2d");
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const dataUrl = canvas.toDataURL("image/webp", 0.7);
+                    onChange(dataUrl);
+                }
+            };
+            img.src = event.target?.result as string;
+        };
+        reader.readAsDataURL(file);
     };
 
-
-    if (!isMounted) return <div className="h-16 w-full bg-gray-50 rounded-lg animate-pulse" />;
+    if (!isMounted) return <div className="h-14 w-full bg-gray-50 rounded-lg animate-pulse" />;
 
     if (value) {
         const isUpload = value.startsWith("blob:") || value.startsWith("data:");
-        // Busca flexível pelo nome do usuário
+
         const matchedUser = isUpload ? null : USERS.find(u => normalizeCompare(u) === normalizeCompare(value));
         const displayName = isUpload ? "Assinatura Importada" : (matchedUser ? formatName(matchedUser) : formatName(value.replace(/_/g, " ")));
 
-        let imgSrc = value;
+        // 🟢 CORREÇÃO: Usar o nome exato (com espaços) como no projeto manga
+        let imgSrc: string | undefined;
         if (!isUpload && matchedUser) {
             imgSrc = `/assinaturas/${matchedUser}.png`;
-        } else if (!isUpload) {
+        } else if (!isUpload && value) {
             imgSrc = `/assinaturas/${value}.png`;
+        } else if (isUpload) {
+            imgSrc = value;
         }
 
+        const finalSrc = imgSrc || '';
+
         return (
-            <div className="flex items-start gap-2 w-full">
+            <div className="flex items-center gap-2 w-full">
                 <div className="flex flex-col items-center flex-1">
-                    {/* Caixa da Assinatura */}
-                    <div className="w-full h-12 border border-green-300 rounded-lg flex items-center justify-center bg-green-50 overflow-hidden px-2">
-                        {imgStage < 3 ? (
+                    <div className="w-full h-14 border border-green-300 rounded-lg flex items-center justify-center bg-green-50 overflow-hidden px-2">
+                        {imgStage < 3 && finalSrc ? (
                             <img
-                                src={imgSrc}
+                                src={finalSrc}
                                 alt="Assinatura"
-                                className="h-full w-auto object-contain max-h-10"
-                                onError={(e) => { (e.target as HTMLImageElement).onerror = null; setImgStage(prev => prev + 1); }}
+                                className="h-full w-auto object-contain max-h-11"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).onerror = null;
+                                    setImgStage(prev => prev + 1);
+                                    // Se falhar, mostra o nome em texto
+                                    const parent = e.currentTarget.parentElement;
+                                    if (parent) {
+                                        const fallback = document.createElement('span');
+                                        fallback.className = 'text-xl text-slate-800 -rotate-2 select-none';
+                                        fallback.style.fontFamily = 'cursive';
+                                        fallback.textContent = displayName.split(' ')[0];
+                                        parent.innerHTML = '';
+                                        parent.appendChild(fallback);
+                                    }
+                                }}
                             />
                         ) : (
-                            <span className="text-lg text-slate-800 -rotate-2 select-none" style={{ fontFamily: "cursive" }}>
+                            <span className="text-xl text-slate-800 -rotate-2 select-none" style={{ fontFamily: "cursive" }}>
                                 {displayName.split(' ')[0]}
                             </span>
                         )}
                     </div>
-                    {/* NOME EM TEXTO (O QUE ESTAVA SUMIDO) */}
-                    <span className="text-[11px] font-bold text-gray-700 mt-1 uppercase tracking-tight text-center w-full truncate">
+                    <span className="text-[10px] font-bold text-gray-700 mt-0.5 uppercase tracking-tight text-center w-full truncate">
                         {displayName}
                     </span>
                 </div>
-                <button onClick={() => { onChange(null); setImgStage(0); }} className="mt-2 text-gray-400 hover:text-red-500 transition-colors"><BiTrash size={18} /></button>
+                <button type="button" onClick={() => { onChange(null); setImgStage(0); }} className="text-gray-400 hover:text-red-500 transition-colors">
+                    <BiTrash size={18} />
+                </button>
             </div>
         );
     }
+
     return (
         <div className="relative w-full flex flex-col gap-1">
             <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
@@ -109,7 +144,9 @@ export const SignatureSelector = ({ value, onChange }: Props) => {
                         }}
                         className="w-full h-10 bg-white border border-gray-300 rounded-lg py-2 pl-8 pr-2 text-sm text-gray-700 focus:ring-2 focus:ring-orange-500 outline-none"
                     />
-                    <datalist id={listId}>{USERS.map((user) => <option key={user} value={user} />)}</datalist>
+                    <datalist id={listId}>
+                        {USERS.map((user) => <option key={user} value={user} />)}
+                    </datalist>
                 </div>
                 <button type="button" onClick={() => fileInputRef.current?.click()} className="h-10 px-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-500 hover:text-blue-600 transition-all flex items-center justify-center">
                     <BiUpload size={18} />

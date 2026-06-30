@@ -1,4 +1,3 @@
-
 type BaseFreq = "Diaria" | "Semanal" | "Quinzenal" | "Mensal" | "a cada 15 dias" | 'OUTRA';
 
 // Condições especiais (o espaço no começo é proposital)
@@ -12,7 +11,6 @@ type Condicao =
 
 // O TypeScript cruza a Base com a Condição automaticamente!
 export type CleaningFrequency = `${BaseFreq}${Condicao}`;
-
 
 export type ColunaDinamica = "Horário" | "Qtd. Cont." | "Qtd. Tesouras";
 
@@ -35,7 +33,7 @@ export interface AreaPreenchimento {
     produtos: string[];
     category: CategoriaArea;
     isWeeklyType?: boolean;
-    instrucaoUso?: string;// Para áreas que, apesar de diárias, têm um tipo específico de frequência semanal
+    instrucaoUso?: string; // Para áreas que, apesar de diárias, têm um tipo específico de frequência semanal
     isMatricial?: boolean;
 }
 
@@ -49,7 +47,7 @@ export interface CleaningLog {
     monitorSignature?: string | null;
 }
 
-// === 2. DADOS ORGANIZADOS E VERTICAIS ===
+// === DADOS ORGANIZADOS E VERTICAIS ===
 export const AREAS_DATA: AreaPreenchimento[] = [
     {
         id: 'panos',
@@ -137,7 +135,7 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         freq: 'a cada 15 dias (em dias de processamento)',
         tituloProdutos: 'Materiais e Produtos Utilizados',
         campo2: 'Horário',
-        produtos: ['P', 'AL', 'HS'],
+        produtos: ['PA', 'AL', 'HS'],
         category: 'Áreas Estruturais'
     },
     {
@@ -154,7 +152,7 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         id: 'material_embalagem',
         nome: 'Depósito de Material de Embalagem',
         doc: 'PHU-011',
-        freq: 'Diaria',
+        freq: 'Diaria (em dias de processamento)',
         tituloProdutos: 'Produtos Utilizados',
         campo2: 'Horário',
         produtos: ['AL', 'DN', 'HS'],
@@ -191,7 +189,7 @@ export const AREAS_DATA: AreaPreenchimento[] = [
     },
     {
         id: 'controle_visitantes',
-        nome: 'Controle e Recepção de Visitantes',
+        nome: 'Sala de Controle e Recepção de Visitantes',
         doc: 'PHU-023',
         freq: 'Diaria (uma vez ao dia)',
         campo2: 'Horário',
@@ -205,7 +203,7 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         freq: 'Mensal',
         tituloProdutos: 'Materiais e Produtos Utilizados',
         campo2: 'Horário',
-        produtos: ['P', 'HS'],
+        produtos: ['PA', 'HS'],
         category: 'Equipamentos'
     },
     {
@@ -225,7 +223,7 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         freq: 'Diaria (em dias de processamento)',
         tituloProdutos: 'Produtos Utilizados',
         campo2: 'Horário',
-        produtos: ['P', 'HS'],
+        produtos: ['PA', 'HS'],
         category: 'Equipamentos'
     },
     {
@@ -235,7 +233,7 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         freq: 'Diaria (duas vezes ao dia)',
         tituloProdutos: 'Produtos Utilizados',
         campo2: 'Horário',
-        produtos: ['AL', 'DT', 'HS'],
+        produtos: ['AL', 'DN', 'HS'],
         category: 'Infraestrutura'
     },
     {
@@ -267,15 +265,6 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         campo2: 'Horário',
         produtos: ['AL', 'DN'],
         category: 'Limpeza Geral'
-    },
-    {
-        id: 'administrativo',
-        nome: 'Setores Administrativos',
-        doc: 'PHU-023',
-        freq: 'Diaria',
-        campo2: 'Horário',
-        produtos: ['AL', 'DN', 'HS', 'A70'],
-        category: 'Infraestrutura'
     },
     {
         id: 'tesouras',
@@ -319,11 +308,11 @@ export const AREAS_DATA: AreaPreenchimento[] = [
     },
     {
         id: 'paredes',
-        nome: 'Paredes',
-        doc: 'PHU-033',
-        freq: 'Quinzenal',
+        nome: 'Paredes do Packing House',
+        doc: 'PHU-013',
+        freq: 'a cada 15 dias (em dias de processamento)',
         campo2: 'Horário',
-        produtos: ['AL', 'DN', 'HS'],
+        produtos: ['DN', 'HS'],
         category: 'Áreas Estruturais'
     },
     {
@@ -338,17 +327,17 @@ export const AREAS_DATA: AreaPreenchimento[] = [
     },
 ];
 
-// === 3. CONSTANTES COMPLEMENTARES ===
+// === CONSTANTES COMPLEMENTARES ===
 export const PRODUTO_LEGENDA: Record<string, string> = {
     'AL': 'Água Limpa',
-    'DAC': 'Ácido Clorado',
+    'DAC': 'Detergente Alcalino Clorado',
     'DN': 'Detergente Neutro',
     'HS': 'Hipoclorito de Sódio',
     'V': 'Vassoura',
     'PA': 'Pano Úmido',
     'P': 'Pá',
     'S': 'Saco de Lixo',
-    'DT': 'Det. Banheiro',
+    'DT': 'Detergente Banheiro',
     'A70': 'Álcool 70%',
     'Sanclor': 'Sanclor',
     'J': 'Jato com água',
@@ -377,17 +366,39 @@ export const FREQUENCIES = [
     { id: "Mensal", name: "Mensal", color: "bg-purple-50 text-purple-700" },
 ];
 
-// Função blindada para encontrar a frequência principal ignorando o que vem entre parênteses
 export const extractFrequencyType = (freq: string): string => {
     if (!freq) return "OUTRA";
-
-    // Converte para maiúsculo para garantir que vai achar mesmo se digitar "diaria" ou "Diaria"
     const upperFreq = freq.toUpperCase();
-
     if (upperFreq.includes('DIARIA') || upperFreq.includes('DIÁRIA')) return "Diaria";
     if (upperFreq.includes('QUINZENAL') || upperFreq.includes('15 DIAS')) return "Quinzenal";
     if (upperFreq.includes('SEMANAL')) return "Semanal";
     if (upperFreq.includes('MENSAL')) return "Mensal";
-
     return "OUTRA";
+};
+
+// =======================================================
+// NOVAS INTERFACES PARA TESOURAS (CONTROLE SEMANAL)
+// =======================================================
+
+export interface RegistroHigienizacaoTesoura {
+    id: number;
+    dataInicio: string;      // YYYY-MM-DD
+    dataFim: string;         // YYYY-MM-DD
+    dias: {
+        [dia: string]: {      // dias: "segunda", "terca", ..., "sabado"
+            qtde: number | '';
+            status: 'C' | 'NC' | '';
+        };
+    };
+    respLimpeza: string | null;
+    monitorResponsavel: string | null;
 }
+
+export const DIAS_SEMANA_TESOURA = [
+    { id: "segunda", label: "Segunda" },
+    { id: "terca", label: "Terça" },
+    { id: "quarta", label: "Quarta" },
+    { id: "quinta", label: "Quinta" },
+    { id: "sexta", label: "Sexta" },
+    { id: "sabado", label: "Sábado" }
+];

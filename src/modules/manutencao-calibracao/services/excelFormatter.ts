@@ -17,24 +17,36 @@ const formatSafeDate = (dateStr: string) => {
     return dateStr;
 };
 
-// --- HELPERS GERAIS E IMAGEM ---
+// --- HELPERS GERAIS E IMAGEM (CORRIGIDO) ---
 const formatName = (str: string) => {
     if (!str) return "";
     if (str.startsWith("data:image")) return "[ASSINATURA DIGITAL]";
     return str.replace(/_/g, " ").toUpperCase();
 };
 
+// 🟢 CORREÇÃO: Usar encodeURIComponent com o nome original (como no projeto manga)
 const fetchSignatureImage = async (baseName: string) => {
+    if (!baseName) return null;
     const baseUrl = window.location.origin;
-    const withSpaces = baseName.replace(/_/g, " ");
-    const tentativas = [`${baseName}.png`, `${withSpaces}.png`, `${withSpaces.toUpperCase()}.png`, `${baseName}.jpg`];
-
-    for (const fileName of tentativas) {
-        try {
-            const res = await fetch(`${baseUrl}/assinaturas/${fileName}`);
-            if (res.ok) return { buffer: await res.blob().then(b => b.arrayBuffer()), ext: fileName.endsWith('.jpg') ? 'jpeg' : 'png' };
-        } catch (e) { }
-    }
+    // Tenta com encodeURIComponent (espaços → %20)
+    const urlEncoded = `/assinaturas/${encodeURIComponent(baseName)}.png`;
+    try {
+        const res = await fetch(urlEncoded);
+        if (res.ok) {
+            const blob = await res.blob();
+            const buffer = await blob.arrayBuffer();
+            return { buffer, ext: 'png' as const };
+        }
+    } catch (e) { }
+    // Fallback: tenta com o nome original (sem codificação)
+    try {
+        const res = await fetch(`${baseUrl}/assinaturas/${baseName}.png`);
+        if (res.ok) {
+            const blob = await res.blob();
+            const buffer = await blob.arrayBuffer();
+            return { buffer, ext: 'png' as const };
+        }
+    } catch (e) { }
     return null;
 };
 
@@ -51,6 +63,7 @@ const applyDataStyle = (cell: ExcelJS.Cell, isCenter = true) => {
     cell.alignment = { horizontal: isCenter ? "center" : "left", vertical: "middle", wrapText: true };
 };
 
+// 🟢 addTableSignature mantido, mas fetchSignatureImage já está corrigido
 const addTableSignature = async (workbook: ExcelJS.Workbook, worksheet: ExcelJS.Worksheet, val: string | null, rNum: number, cNum: number, cell: ExcelJS.Cell) => {
     if (!val) return;
     const imgFile = val.startsWith("data:image") ? { base64: val.split(",")[1], ext: "png" } : await fetchSignatureImage(val);
@@ -99,7 +112,7 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
     else if (activeTab === "reparos") {
         title = "REGISTRO DE REPAROS E MANUTENÇÕES";
         codigoDoc = COMPLIANCE_MANUTENCAO.pops.reparos;
-        headers = ["Data", "Equipamento", "Serviço", "Solicitante", "Solicitada por", "Confirmação Limpeza", "Responsável", "Supervisor", "Ação corretiva"];
+        headers = ["Data", "Equipamento", "Serviço", "Solicitante", "Solicitada por", "Confirmação Limpeza", "Responsável", "Coordenador da Área", "Ação corretiva"];
         ws.columns = [{ width: 18 }, { width: 25 }, { width: 16 }, { width: 22 }, { width: 22 }, { width: 18 }, { width: 22 }, { width: 22 }, { width: 35 }];
     }
     else {
@@ -156,13 +169,13 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
     headerRow.height = activeTab === "checklist" ? 65 : 30;
     headerRow.eachCell(applyHeaderStyle);
 
-    // --- 5. RENDERIZAÇÃO DOS DADOS COM AS DATAS SEGURAS ---
+    // --- 5. RENDERIZAÇÃO DOS DADOS ---
     if (activeTab === "balancas") {
         const filledBalancas = balancasLogs.filter(log => !!String(log.dataCalibracao || "").trim() || !!String(log.identificacaoBalanca || "").trim());
 
         for (const log of filledBalancas) {
             const dataRow = ws.addRow([
-                formatSafeDate(log.dataCalibracao), // 🟢 DATA SEGURA
+                formatSafeDate(log.dataCalibracao),
                 log.identificacaoBalanca || "",
                 log.quantidadeMedida || "",
                 log.houveVariacao || "-",
@@ -180,14 +193,14 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
 
         for (const log of filledReparos) {
             const dataRow = ws.addRow([
-                formatSafeDate(log.data), // 🟢 DATA SEGURA
+                formatSafeDate(log.data),
                 log.equipamento || "",
                 log.servico || "",
                 "", // Solicitante
                 "", // Solicitada por
                 log.confirmacaoLimpeza || "-",
                 "", // Responsável Manutenção
-                "", // Supervisor
+                "", // Coordenador da Área
                 log.acaoCorretiva || ""
             ]);
             dataRow.height = 55;
@@ -207,7 +220,7 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
         const filledInspecoes = inspecoes.filter(insp => !!String(insp.data || "").trim());
 
         for (const insp of filledInspecoes) {
-            const rowData = [formatSafeDate(insp.data)]; // 🟢 DATA SEGURA
+            const rowData = [formatSafeDate(insp.data)];
             itens.forEach((_, i) => rowData.push(insp.respostas?.[i] ?? ""));
             rowData.push(insp.acaoCorretiva || "");
             rowData.push(""); // Espaço da assinatura

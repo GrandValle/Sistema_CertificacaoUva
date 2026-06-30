@@ -33,6 +33,7 @@ export interface InusuaisLog {
 export interface RegistroRejeito {
     id: number;
     quantidade: string;
+    produto: string;
     dataRetencao: string;
     responsavelRetencao: string | null;
     dataSaida: string;
@@ -54,7 +55,7 @@ export const PRAGAS_SETORES = [
 export const PRAGAS_COLUNAS = [
     "Baratas", "Camundongos", "Moscas", "Formigas", "Aranhas", "Traças",
     "Mariposas", "Besouros", "Roedores", "Pássaros", "Morcegos",
-    "Lagartixas", "Sapos/Rãs", "Cobra", "Tarântula", "Outros", "Nº Armadilha"
+    "Lagartixas", "Sapos/Rãs", "Cobra", "Outros", "Nº Armadilha"
 ];
 
 export const LEGENDA_INUSUAIS = [
@@ -72,8 +73,10 @@ export const LEGENDA_PRAGAS = [
 ];
 
 export const LEGENDA_REJEITOS = [
-    "SIM: Ausência de material estranho.",
-    "NÃO: Presença de material estranho."
+    "Retido: Produto aguardando análise técnica ou destinação em área isolada.",
+    "Rejeitado: Produto identificado como não conforme, destinado ao descarte ou reprocessamento.",
+    "Assinaturas: Obrigatórias para a validação da retenção e da posterior liberação/saída do item.",
+    "Ação Corretiva: Descrição obrigatória para toda não conformidade registrada."
 ];
 
 export const LEGENDA_VIDROS = [

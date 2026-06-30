@@ -9,7 +9,7 @@ import { STORAGE_KEYS } from "../../../constants/storageKeys";
 import { salvarDocumento } from "../../../services/api";
 
 interface ManutencaoPersistedState {
-    frequencia?: FrequenciaAfericao;
+    frequencia?: string; // 🔥 ALTERADO: agora aceita string livre
     balancasLogs?: RegistroBalanca[];
     reparosLogs?: unknown[];
     inspecoesSemanais?: InspecaoChecklist[];
@@ -62,7 +62,9 @@ export function useManutencaoController() {
     const [activeTab, setActiveTab] = useState<ManutencaoTabType>("checklist");
     const [freqChecklist, setFreqChecklist] = useState<"Semanal" | "Mensal">("Semanal");
 
-    const [frequencia, setFrequencia] = useState<FrequenciaAfericao>(() => savedState?.frequencia ?? "Diário");
+    // 🔥 ALTERADO: estado agora é string, com valor inicial do savedState ou "Diário"
+    const [frequencia, setFrequencia] = useState<string>(() => savedState?.frequencia ?? "Diário");
+
     const [balancasLogs, setBalancasLogs] = useState<RegistroBalanca[]>(
         () => savedState?.balancasLogs && savedState.balancasLogs.length > 0
             ? savedState.balancasLogs
@@ -186,7 +188,7 @@ export function useManutencaoController() {
             // 1. Gera o Blob do Excel
             const excelBlob = await exportManutencaoToExcel({
                 activeTab,
-                frequencia: frequencia as FrequenciaAfericao,
+                frequencia: frequencia as any, // 🔥 Agora é string, sem conflito de tipo
                 freqChecklist,
                 balancasLogs,
                 reparosLogs,
@@ -208,7 +210,7 @@ export function useManutencaoController() {
                 popCode: codigoDoc,
                 titulo: tipoNome,
                 mes: mesAtual,
-                tipo: tipoNome, // 👈 O Prisma só aceita 'tipo' nesta tabela
+                tipo: tipoNome,
                 frequencia: freqNome,
                 dadosManutencao: dadosManutencao
             };
@@ -217,7 +219,7 @@ export function useManutencaoController() {
 
             // 3. Salva no Banco de Dados
             const resposta = await salvarDocumento(
-                "manutencao_calibracao", // Nome mapeado na rota do seu backend
+                "manutencao_calibracao",
                 dadosDoBanco,
                 excelBlob as Blob,
                 `Manutencao_${tipoNome.replace(/\s+/g, '_')}_${now.getTime()}.xlsx`

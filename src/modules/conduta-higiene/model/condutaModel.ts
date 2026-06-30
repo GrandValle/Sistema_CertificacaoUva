@@ -1,4 +1,92 @@
+// model/inspecaoModel.ts
+
 export type CondutaTabType = "inspecao" | "lavagem";
+
+// === LOGICA DE DATAS DINÂMICAS ===
+export type WeekDayType = "Seg" | "Ter" | "Qua" | "Qui" | "Sex" | "Sáb";
+
+/**
+ * Gera os labels dos dias da semana baseados na string da semana.
+ * Suporta formatos:
+ * - "08 a 13 de Junho" (extenso)
+ * - "08/06 a 13/06" (numérico)
+ * - "08 a 13 de Junho 2026" (com ano)
+ * 
+ * Retorna: [{ short: "Seg", label: "Seg (08/06)" }, ...]
+ */
+export const generateWeekDays = (weekStartString?: string) => {
+    const baseDays: WeekDayType[] = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+    // Se não houver string, retorna apenas os dias fixos
+    if (!weekStartString) {
+        return baseDays.map(day => ({ short: day, label: day }));
+    }
+
+    let startDay: number;
+    let startMonth: number;
+    let startYear: number;
+
+    // 1. Tenta formato extenso: "08 a 13 de Junho" ou "08 a 13 de Junho 2026"
+    const matchExtenso = weekStartString.match(/(\d{2})\s*a\s*\d{2}\s*de\s*([A-Za-zç]+)(?:\s*(\d{4}))?/i);
+    if (matchExtenso) {
+        startDay = parseInt(matchExtenso[1], 10);
+        const monthName = matchExtenso[2];
+        startYear = matchExtenso[3] ? parseInt(matchExtenso[3], 10) : new Date().getFullYear();
+
+        // Mapeia nome do mês para número (0-indexado)
+        const meses: Record<string, number> = {
+            janeiro: 0, fevereiro: 1, março: 2, abril: 3, maio: 4, junho: 5,
+            julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11
+        };
+        startMonth = meses[monthName.toLowerCase()] ?? 0;
+    } else {
+        // 2. Tenta formato numérico: "29/07 a 04/08" ou "29/07"
+        const matchSlash = weekStartString.match(/(\d{2})\/(\d{2})/);
+        if (matchSlash) {
+            startDay = parseInt(matchSlash[1], 10);
+            startMonth = parseInt(matchSlash[2], 10) - 1; // mês 0-indexado
+            startYear = new Date().getFullYear();
+        } else {
+            // 3. Fallback: tenta extrair números soltos
+            const numbers = weekStartString.match(/\d+/g);
+            if (numbers && numbers.length >= 2) {
+                startDay = parseInt(numbers[0], 10);
+                startMonth = parseInt(numbers[1], 10) - 1;
+                startYear = new Date().getFullYear();
+            } else {
+                // Não conseguiu extrair data – retorna apenas os dias
+                return baseDays.map(day => ({ short: day, label: day }));
+            }
+        }
+    }
+
+    // Cria a data de início
+    const dataInicio = new Date(startYear, startMonth, startDay);
+
+    // Se a data for inválida, fallback
+    if (isNaN(dataInicio.getTime())) {
+        return baseDays.map(day => ({ short: day, label: day }));
+    }
+
+    // Gera os 6 dias da semana (Seg a Sáb)
+    const resultado = [];
+    for (let i = 0; i < 6; i++) {
+        const dataAtual = new Date(dataInicio);
+        dataAtual.setDate(dataInicio.getDate() + i);
+
+        const dia = String(dataAtual.getDate()).padStart(2, '0');
+        const mes = String(dataAtual.getMonth() + 1).padStart(2, '0');
+
+        resultado.push({
+            short: baseDays[i],
+            label: `${baseDays[i]} (${dia}/${mes})`
+        });
+    }
+
+    return resultado;
+};
+
+// === DADOS E TIPOS ===
 
 export const QUESTIONS = [
     "01. Todos os uniformes estão limpos e em bom estado de conservação, todos lavaram as mãos antes de entrar no packing house e depois de usar os banheiros e após os intervalos de trabalho?",
@@ -60,6 +148,15 @@ export interface LavagemLog {
     dias: {
         [key: string]: LavagemTurnos;
     }
+}
+
+export interface ColaboradorLavagem {
+    id: string;
+    nome: string;
+    tipo: "EFETIVO" | "CONTRATADO";
+    ativo: boolean;
+    criadoEm: string;
+    atualizadoEm: string;
 }
 
 export const COMPLIANCE = {

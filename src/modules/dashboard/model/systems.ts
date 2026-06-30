@@ -6,7 +6,8 @@ export type SystemCategory =
     | "Estoque"
     | "Seguranca"
     | "Manutencao"
-    | "Qualidade";
+    | "Qualidade"
+//| "Administrativo";
 
 export type SystemDefinition = {
     id: string;
@@ -30,9 +31,11 @@ export const systemCategories: Array<{
         { id: "Seguranca", name: "Segurança" },
         { id: "Manutencao", name: "Manutenção" },
         { id: "Qualidade", name: "Qualidade" },
+        //{ id: "Administrativo", name: "Administrativo" },
     ];
 
 export const systems: SystemDefinition[] = [
+
     {
         id: "higienizacao-geral",
         href: "/higienizacao-geral",
@@ -57,7 +60,7 @@ export const systems: SystemDefinition[] = [
         id: "estoque-materiais",
         href: "/estoque-materiais",
         title: "Estoque e Materiais",
-        description: "Controle de insumos, materiais de limpeza e utensilios.",
+        description: "Administração de materiais, ferramentas e itens de uso.",
         category: "Estoque",
         icon: "boxes",
         accentClass: "from-violet-500 to-purple-600",
@@ -98,11 +101,22 @@ export const systems: SystemDefinition[] = [
         title: "Controle de Acesso",
         description: "Registro de entrada e saída de visitantes em setores internos.",
         href: "/controle-acesso",
-        icon: "shield",
+        icon: "shield-check",
         primaryCode: "",
         category: "Seguranca",
         accentClass: "from-yellow-600 to-yellow-600",
-    }
+    },
+    {
+        id: "questionario-visitantes",
+        title: "Questionário de Visitantes",
+        description: "Triagem de saúde e assinatura digital de visitantes.",
+        href: "/questionario-visitantes",
+        icon: "stethoscope",
+        primaryCode: "PHU-038",
+        category: "Seguranca",
+        accentClass: "from-green-600 to-green-600"
+    },
+
 ];
 
 export function getSystemById(id: string) {

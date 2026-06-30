@@ -1,5 +1,5 @@
 // Tipagem para as abas da tela
-export type TabType = "estoque" | "tesouras" | "oculos";
+export type TabType = "estoque" | "tesouras" | "oculos" | "embalagem";
 
 // Tipagem do Catálogo de Produtos
 export interface ProdutoCatalogo {
@@ -25,27 +25,85 @@ export interface EstoqueLog {
 
 // Tipagem da Cautela de Tesouras (PHU-043)
 export interface RegistroTesoura {
-    id: number;
+    id: string;
     funcionario: string;
     numeroTesoura: string;
+    tipo: "EFETIVO" | "CONTRATADO" | "DESLIGADO" | "DESLIGADA";
     dias: {
-        [key: string]: { e: boolean; d: boolean };
+        [key: string]: {
+            e: boolean;
+            d: boolean;
+        };
     };
 }
 
+// Tipagem da Devolução de Óculos (PHU-044)
 export interface RegistroOculos {
-    id: number;
+    id: string;
     data: string;
-    colaborador: string;
+    colaboradorId: string; // UUID do colaborador
     intacto: "SIM" | "NÃO" | null;
     assinatura: string | null;
     observacao: string;
+    status: "ATIVO" | "INATIVO";
+    criadoEm?: string;
+    atualizadoEm?: string;
 }
 
-// Constantes padronizadas (Ficam no model para serem reutilizadas sem sujar o front-end)
-export const UNIDADES_MEDIDA = ["Kg", "g", "L", "ml", "Unidade"];
+// =======================================================
+// CONTROLE DE ENTRADA DE EMBALAGEM (PHU-032)
+// =======================================================
 
-export const DIAS_SEMANA = ["SEG", "TER", "QUA", "QUI", "SEX", "SAB"];
+export interface EmbalagemEntry {
+    id: string;
+
+    // Dados da carga
+    data: string;
+    horaChegada: string;
+    responsavel: string | null;
+    tipoTransporte: string;
+    tipoMaterial: string;
+
+    // Condições de acondicionamento da carga (AGORA COM 3 ESTADOS)
+    limpeza: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
+    conservacao: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
+    estadoTransporte: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
+    odoresTransporte: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
+    problemaAcondicionamento: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
+    estadoMaterial: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
+
+    // Verificações rápidas
+    materialDanificado: boolean | null;
+    materialLimpo: boolean | null;
+    comOdores: boolean | null;
+
+    // Campo de observações
+    observacoes: string;
+
+    // Ações corretivas
+    acoesCorretivas: string;
+}
+
+// =======================================================
+// CONSTANTES PADRONIZADAS
+// =======================================================
+
+export const UNIDADES_MEDIDA = [
+    "Kg",
+    "g",
+    "L",
+    "ml",
+    "Unidade"
+];
+
+export const DIAS_SEMANA = [
+    "SEG",
+    "TER",
+    "QUA",
+    "QUI",
+    "SEX",
+    "SAB"
+];
 
 export const LEGENDA_ESTOQUE = [
     "Entrada: Quantidade de material recebida e integrada ao inventário.",
@@ -63,3 +121,18 @@ export const LEGENDA_TESOURAS = [
     "D: Devolução da tesoura ao estoque.",
     "E/D: Entrega e devolução realizadas no mesmo dia."
 ];
+
+export const CAMPOS_CONDICOES = [
+    { label: "Limpeza do Veículo", field: "limpeza" },
+    { label: "Conservação do Material", field: "conservacao" },
+    { label: "Estado do Transporte", field: "estadoTransporte" },
+    { label: "Odores no Transporte", field: "odoresTransporte" },
+    { label: "Problema de Acondicionamento", field: "problemaAcondicionamento" },
+    { label: "Estado do Material", field: "estadoMaterial" },
+] as const;
+
+export const VERIFICACOES_RAPIDAS_BASE = [
+    { id: "materialDanificado", label: "Material Danificado?", invertColor: true },
+    { id: "materialLimpo", label: "Material Limpo?", invertColor: false },
+    { id: "comOdores", label: "Com Odores?", invertColor: true }
+] as const;

@@ -11,6 +11,7 @@ import {
   BiBuilding, BiUser, BiError, BiWater, BiTrash
 } from "react-icons/bi";
 import { FaTractor } from "react-icons/fa";
+import { PRODUTOS_LIMPEZA } from "../model/inspecaoModel";
 
 export default function InspecaoPage() {
   const [isMounted, setIsMounted] = useState(false);
@@ -29,23 +30,21 @@ export default function InspecaoPage() {
     exportarExcel
   } = useInspecaoController();
 
-  // Cálculo de resumo
+  // Cálculo de resumo (Corrigido: sem a trava isMounted)
   let totalChecks = 0; let conformes = 0; let naoConformes = 0;
-  if (isMounted) {
-    preOpData.forEach(row => {
-      Object.values(row.checks).forEach(val => {
-        if (val !== null) totalChecks++;
-        if (val === "C") conformes++;
-        if (val === "NC") naoConformes++;
-      });
+  preOpData.forEach(row => {
+    Object.values(row.checks).forEach(val => {
+      if (val !== null) totalChecks++;
+      if (val === "C") conformes++;
+      if (val === "NC") naoConformes++;
     });
-  }
+  });
 
   const getDocInfo = () => {
     if (activeTab === "pre_inspecao") return { code: "2.11.7", name: "Pré-Inspeção Operacional", title: "PRÉ-INSPEÇÃO OPERACIONAL" };
     if (activeTab === "transporte") return { code: "PHU-031", name: "Controle de higiene dos veículos e contentores", title: "INSPEÇÃO DE TRANSPORTE" };
-    if (activeTab === "embalagem") return { code: "PHU-032", name: "Inspeção de Embalagem", title: "INSPEÇÃO DE EMBALAGEM" };
-    return { code: "PHU-036", name: "Entrada de Material de Limpeza", title: "INSPEÇÃO MATERIAIS DE LIMPEZA" };
+    if (activeTab === "embalagem") return { code: "PHU-032", name: "Inspeção de Material de Embalagem", title: "INSPEÇÃO DE MATERIAL DE EMBALAGEM" };
+    return { code: "PHU-036", name: "Entrada de Material de Limpeza", title: "INSPEÇÃO DE MATERIAIS DE LIMPEZA" };
   };
 
   const docInfo = getDocInfo();
@@ -80,11 +79,11 @@ export default function InspecaoPage() {
   };
 
   // Filtra os logs para mostrar apenas os do produto selecionado na aba de limpeza
-  const currentCleaningLogs = cleaningLogs ? cleaningLogs.filter(log => log.product === selectedCleaningProduct) : [];
+  const currentCleaningLogs = cleaningLogs || [];
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 font-sans text-gray-800 flex justify-center">
-      <div className={`w-full ${activeTab === 'embalagem' || activeTab === 'limpeza' ? 'max-w-[1400px]' : 'max-w-5xl'} bg-white rounded-xl shadow-xl flex flex-col overflow-hidden transition-all duration-300`}>
+      <div className="w-full max-w-5xl bg-white rounded-xl shadow-xl flex flex-col overflow-hidden transition-all duration-300">
 
         {/* HEADER */}
         <div className="bg-[#1a1c23] text-white">
@@ -144,15 +143,23 @@ export default function InspecaoPage() {
                   </div>
                 </div>
 
+                {/* PAINEL DE RESUMO CORRIGIDO: sem isMounted e com suppressHydrationWarning */}
                 <div className="lg:w-64 bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col justify-center">
                   <h3 className="text-sm font-bold text-center text-gray-800 mb-4 tracking-tighter">RESUMO</h3>
-                  {isMounted && (
-                    <div className="space-y-2.5 text-sm">
-                      <div className="flex justify-between items-center text-gray-600"><span>Verificações:</span> <span className="font-bold text-gray-800">{totalChecks}</span></div>
-                      <div className="flex justify-between items-center text-green-600"><span>Conformes:</span> <span className="font-bold text-green-700">{conformes}</span></div>
-                      <div className="flex justify-between items-center text-red-600"><span>Não Conformes:</span> <span className="font-bold text-red-700">{naoConformes}</span></div>
+                  <div className="space-y-2.5 text-sm">
+                    <div className="flex justify-between items-center text-gray-600">
+                      <span>Verificações:</span>
+                      <span suppressHydrationWarning className="font-bold text-gray-800">{totalChecks}</span>
                     </div>
-                  )}
+                    <div className="flex justify-between items-center text-green-600">
+                      <span>Conformes:</span>
+                      <span suppressHydrationWarning className="font-bold text-green-700">{conformes}</span>
+                    </div>
+                    <div className="flex justify-between items-center text-red-600">
+                      <span>Não Conformes:</span>
+                      <span suppressHydrationWarning className="font-bold text-red-700">{naoConformes}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -293,8 +300,24 @@ export default function InspecaoPage() {
                         {['bauLimpo', 'semOdor', 'livreAnimais', 'contentorLimpo'].map(f => (
                           <td key={f} className="p-4 text-center">
                             <div className="flex gap-1 justify-center">
-                              <button type="button" onClick={() => updateTransport(idx, f as any, 'C')} className={`w-9 h-9 rounded-lg font-black text-[10px] transition-all ${log[f as keyof typeof log] === 'C' ? 'bg-green-500 text-white shadow-md' : 'bg-gray-100 border border-gray-200 text-gray-400 hover:bg-green-50'}`}>C</button>
-                              <button type="button" onClick={() => updateTransport(idx, f as any, 'NC')} className={`w-9 h-9 rounded-lg font-black text-[10px] transition-all ${log[f as keyof typeof log] === 'NC' ? 'bg-red-500 text-white shadow-md' : 'bg-gray-100 border border-gray-200 text-gray-400 hover:bg-red-50'}`}>NC</button>
+                              {(['C', 'NC'] as const).map((opt) => {
+                                const isSelected = log[f as keyof typeof log] === opt;
+                                const isConforme = opt === 'C';
+
+                                return (
+                                  <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => updateTransport(idx, f as any, isSelected ? null : opt)}
+                                    className={`w-9 h-9 rounded-lg font-black text-[10px] transition-all ${isSelected
+                                      ? (isConforme ? 'bg-green-500 text-white shadow-md' : 'bg-red-500 text-white shadow-md')
+                                      : `bg-gray-100 border border-gray-200 text-gray-400 ${isConforme ? 'hover:bg-green-50' : 'hover:bg-red-50'}`
+                                      }`}
+                                  >
+                                    {opt}
+                                  </button>
+                                );
+                              })}
                             </div>
                           </td>
                         ))}
@@ -310,7 +333,8 @@ export default function InspecaoPage() {
 
           {/* ================= ABA 3: EMBALAGEM (PHU-032) ================= */}
           {activeTab === "embalagem" && (
-            <div className="space-y-4 animate-fade-in">
+            <div className="space-y-6 animate-fade-in">
+              {/* HEADER */}
               <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-purple-100 text-purple-600 rounded-lg"><BiPackage size={22} /></div>
@@ -319,56 +343,175 @@ export default function InspecaoPage() {
                     <p className="text-xs text-gray-500 font-medium tracking-wide">Documento PHU-032 1.3.6 - Controle de qualidade de insumos</p>
                   </div>
                 </div>
-                <button type="button" onClick={addPackagingRow} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-purple-600 text-white rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all"><BiPlus size={18} /> Novo Registro</button>
+                <button
+                  type="button"
+                  onClick={addPackagingRow}
+                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-purple-600 text-white rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all"
+                >
+                  <BiPlus size={18} /> Novo Registro
+                </button>
               </div>
 
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
-                <table className="min-w-max w-full text-sm border-collapse">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr className="text-[11px] uppercase tracking-widest text-gray-500 font-black">
-                      <th className="p-4 text-left w-32">Data</th>
-                      <th className="p-4 text-left w-48">Tipo de Material</th>
-                      <th className="p-4 text-center w-24">Quant.</th>
-                      <th className="p-4 text-center w-32">Lote</th>
-                      <th className="p-4 text-center w-32">Validade</th>
-                      <th className="p-4 text-center w-40 whitespace-nowrap leading-tight">Livre de Pragas/Roedores?</th>
-                      <th className="p-4 text-center w-28 whitespace-nowrap leading-tight">Emb. Fechada?</th>
-                      <th className="p-4 text-center w-28 whitespace-nowrap leading-tight">Qualid. Conforme?</th>
-                      <th className="p-4 text-left min-w-72">Observações</th>
-                      <th className="p-4 text-center w-64">Responsável (Assinatura)</th>
-                      <th className="p-4 w-12"></th>
-                    </tr>
-                  </thead>
+              {/* LISTA DE CARDS */}
+              <div className="space-y-6">
+                {packagingLogs.map((p, idx) => (
+                  <div key={p.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    {/* Cabeçalho do card com número e botão remover */}
+                    <div className="bg-gray-50 px-5 py-3 border-b border-gray-200 flex justify-between items-center">
+                      <span className="font-bold text-gray-700 text-sm uppercase tracking-wider">
+                        Registro #{idx + 1}
+                      </span>
+                      <button
+                        onClick={() => removePackagingRow(p.id)}
+                        className="text-gray-400 hover:text-red-500 transition-colors"
+                      >
+                        <BiXCircle size={20} />
+                      </button>
+                    </div>
 
-                  <tbody className="divide-y divide-gray-100">
-                    {packagingLogs.map((p, idx) => (
-                      <tr key={p.id} className="hover:bg-purple-50/30 transition-colors group">
-                        <td className="p-3"><input type="date" value={p.date} onChange={(e) => updatePackaging(idx, 'date', e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] outline-none shadow-sm" /></td>
-                        <td className="p-3"><input type="text" placeholder="Papelão..." value={p.materialType} onChange={(e) => updatePackaging(idx, 'materialType', e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs font-bold outline-none shadow-sm focus:border-purple-400" /></td>
-                        <td className="p-3 text-center"><input type="text" placeholder="0" value={p.quantity} onChange={(e) => updatePackaging(idx, 'quantity', e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-center outline-none" /></td>
-                        <td className="p-3 text-center"><input type="text" placeholder="LOTE" value={p.lote} onChange={(e) => updatePackaging(idx, 'lote', e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-center outline-none font-medium" /></td>
-                        <td className="p-3"><input type="date" value={p.validity} onChange={(e) => updatePackaging(idx, 'validity', e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] outline-none shadow-sm" /></td>
+                    {/* CORPO DO CARD */}
+                    <div className="p-5 space-y-5">
+                      {/* Linha 1: Data, Material, Quantidade, Lote, Validade */}
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Data</label>
+                          <input
+                            type="date"
+                            value={p.date}
+                            onChange={(e) => updatePackaging(idx, 'date', e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Tipo de Material</label>
+                          <input
+                            type="text"
+                            placeholder="Papelão, plástico..."
+                            value={p.materialType}
+                            onChange={(e) => updatePackaging(idx, 'materialType', e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Quantidade</label>
+                          <input
+                            type="text"
+                            placeholder="0"
+                            value={p.quantity}
+                            onChange={(e) => updatePackaging(idx, 'quantity', e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Lote</label>
+                          <input
+                            type="text"
+                            placeholder="LOTE"
+                            value={p.lote}
+                            onChange={(e) => updatePackaging(idx, 'lote', e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Validade</label>
+                          <input
+                            type="date"
+                            value={p.validity}
+                            onChange={(e) => updatePackaging(idx, 'validity', e.target.value)}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
+                          />
+                        </div>
+                      </div>
 
-                        {['livrePragas', 'embalagemFechada', 'qualidadeConforme'].map(f => (
-                          <td key={f} className="p-3 text-center">
-                            <div className="flex gap-1 justify-center">
-                              <button type="button" onClick={() => updatePackaging(idx, f as any, 'C')} className={`w-9 h-9 rounded-lg font-black text-[10px] transition-all ${p[f as keyof typeof p] === 'C' ? 'bg-green-500 text-white shadow-md scale-105' : 'bg-gray-100 border border-gray-200 text-gray-400 hover:bg-green-50'}`}>C</button>
-                              <button type="button" onClick={() => updatePackaging(idx, f as any, 'NC')} className={`w-9 h-9 rounded-lg font-black text-[10px] transition-all ${p[f as keyof typeof p] === 'NC' ? 'bg-red-500 text-white shadow-md scale-105' : 'bg-gray-100 border border-gray-200 text-gray-400 hover:bg-red-50'}`}>NC</button>
+                      {/* Linha 2: Status da Inspeção */}
+                      <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
+
+                        <h4 className="text-purple-700 font-bold text-sm mb-4 uppercase tracking-wide">
+                          Status da Inspeção
+                        </h4>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+                          {[
+                            { key: "livrePragas", label: "Livre de Pragas/Roedores?" },
+                            { key: "embalagemFechada", label: "Embalagem Fechada?" },
+                            { key: "qualidadeConforme", label: "Qualidade Conforme?" }
+                          ].map((item) => (
+
+                            <div
+                              key={item.key}
+                              className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between shadow-sm"
+                            >
+
+                              <span className="text-sm font-semibold text-gray-700 leading-tight max-w-[140px]">
+                                {item.label}
+                              </span>
+
+                              <div className="flex gap-2">
+                                {['C', 'NC'].map((val) => {
+                                  const isSelected = p[item.key as keyof typeof p] === val;
+                                  const isGreen = val === "C";
+
+                                  return (
+                                    <button
+                                      key={val}
+                                      type="button"
+                                      onClick={() => updatePackaging(idx, item.key as any, isSelected ? "" : val)}
+                                      className={`w-12 h-10 rounded-lg font-bold text-sm transition-all ${isSelected
+                                        ? isGreen ? "bg-green-500 text-white shadow-md" : "bg-red-500 text-white shadow-md"
+                                        : isGreen ? "bg-white border border-green-300 text-green-600" : "bg-white border border-red-300 text-red-500"
+                                        }`}
+                                    >
+                                      {val}
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
-                          </td>
-                        ))}
+                          ))}
+                        </div>
+                      </div>
 
-                        <td className="p-3"><input type="text" placeholder="Notas importantes..." value={p.obs} onChange={(e) => updatePackaging(idx, 'obs', e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-xs outline-none shadow-sm focus:ring-1 focus:ring-purple-300" /></td>
-                        <td className="p-3">
-                          <SignatureSelector value={p.responsavel} onChange={(v) => updatePackaging(idx, 'responsavel', v)} />
-                        </td>
-                        <td className="p-3 text-center"><button type="button" onClick={() => removePackagingRow(p.id)} className="text-gray-300 hover:text-red-500 transition-colors"><BiXCircle size={22} /></button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                      {/* Linha 3: Observações (destacada) + Responsável */}
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Observações</label>
+                          <div className="bg-blue-50/70 rounded-xl border border-blue-200 p-3 shadow-sm">
+                            <textarea
+                              rows={3}
+                              placeholder="Notas importantes sobre a inspeção..."
+                              value={p.obs}
+                              onChange={(e) => updatePackaging(idx, 'obs', e.target.value)}
+                              className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 resize-none bg-white/80"
+                            />
+                            <p className="text-[10px] text-blue-500/70 mt-1 italic">
+                              Inclua detalhes sobre não conformidades ou observações gerais.
+                            </p>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Responsável (Assinatura)</label>
+                          <div className="border border-gray-300 rounded-lg bg-white min-h-[44px] flex items-center p-1">
+                            <SignatureSelector
+                              value={p.responsavel}
+                              onChange={(v) => updatePackaging(idx, 'responsavel', v)}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <p className="text-[10px] text-gray-400 text-center italic md:hidden py-2 tracking-widest uppercase">Deslize a tabela para o lado para preencher assinatura ↔️</p>
+
+              {/* Caso não haja registros (nunca vai acontecer, mas deixamos por segurança) */}
+              {packagingLogs.length === 0 && (
+                <div className="text-center py-12 text-gray-400">
+                  <BiPackage size={40} className="mx-auto mb-3 opacity-30" />
+                  <p className="font-medium">Nenhum registro de embalagem ainda.</p>
+                  <p className="text-sm">Clique em "Novo Registro" para começar.</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -383,10 +526,13 @@ export default function InspecaoPage() {
                       <BiWater size={24} />
                     </div>
                     <div>
+                      {/* Título dinâmico: mostra o produto da 1ª linha ou o texto padrão */}
                       <h2 className="font-black text-gray-800 text-xl tracking-tight">
-                        {selectedCleaningProduct}
+                        {currentCleaningLogs[0]?.product || "Materiais de Limpeza"}
                       </h2>
-                      <p className="text-sm font-medium text-cyan-600 mt-0.5">Planilha de inspeção de entrada de material de limpeza</p>
+                      <p className="text-sm font-medium text-cyan-600 mt-0.5">
+                        Planilha de inspeção de entrada de insumos
+                      </p>
                     </div>
                   </div>
 
@@ -400,24 +546,25 @@ export default function InspecaoPage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="min-w-[950px] w-full text-sm border-collapse">
+                  <table className="min-w-[1000px] w-full text-sm border-collapse">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr className="text-[10px] lg:text-[11px] uppercase tracking-widest text-gray-600 font-black leading-tight">
                         <th className="p-3 text-left w-32">Data</th>
-                        <th className="p-3 text-center w-28">Produto Correto?</th>
-                        <th className="p-3 text-center w-28">Composição OK?</th>
-                        <th className="p-3 text-center w-28">Embalagem OK?</th>
-                        <th className="p-3 text-center w-28">Padrão Exigido?</th>
-                        <th className="p-3 text-center w-28">Cumpre Pedido?</th>
-                        <th className="p-3 text-left w-56">Responsável</th>
+                        <th className="p-3 text-left w-48">Produto</th>
+                        <th className="p-3 text-center w-24">Produto Correto?</th>
+                        <th className="p-3 text-center w-24">Composição. OK?</th>
+                        <th className="p-3 text-center w-24">Embalagem. OK?</th>
+                        <th className="p-3 text-center w-24">Padrão Exigido?</th>
+                        <th className="p-3 text-center w-24">Cumpre com as exigências?</th>
+                        <th className="p-3 text-left w-48">Resp. Recebimento</th>
                         <th className="p-3 w-12 text-center">Ações</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {currentCleaningLogs.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="p-8 text-center text-gray-400 font-medium">
-                            Nenhum registro preenchido para o Sanclor ainda. Clique em &quot;Novo Registro&quot;.
+                          <td colSpan={9} className="p-8 text-center text-gray-400 font-medium">
+                            Nenhum registro preenchido. Clique em &quot;Novo Registro&quot;.
                           </td>
                         </tr>
                       ) : (
@@ -427,22 +574,45 @@ export default function InspecaoPage() {
                               <input type="date" value={log.date} onChange={(e) => updateCleaning(log.id, 'date', e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-cyan-400 shadow-sm" />
                             </td>
 
+                            {/* SELECT DE PRODUTOS */}
+                            <td className="p-2">
+                              <select
+                                value={log.product || ""}
+                                onChange={(e) => updateCleaning(log.id, 'product', e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-cyan-400 bg-white"
+                              >
+                                <option value="">Selecione...</option>
+                                {PRODUTOS_LIMPEZA.map((p) => (
+                                  <option key={p} value={p}>{p}</option>
+                                ))}
+                              </select>
+                            </td>
+
                             {/* Colunas Sim/Não */}
                             {(['produtoCorreto', 'composicaoOk', 'embalagemOk', 'padraoExigido', 'cumprePedido'] as const).map(field => (
                               <td key={field} className="p-2">
-                                <div className="flex items-center justify-center gap-3">
-                                  <label className="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" checked={log[field] === 'Sim'} onChange={() => updateCleaning(log.id, field, 'Sim')} className="w-3.5 h-3.5 text-cyan-600 focus:ring-cyan-500 border-gray-300 cursor-pointer" />
-                                    <span className="text-[11px] font-bold text-gray-600">Sim</span>
-                                  </label>
-                                  <label className="flex items-center gap-1 cursor-pointer">
-                                    <input type="radio" checked={log[field] === 'Não'} onChange={() => updateCleaning(log.id, field, 'Não')} className="w-3.5 h-3.5 text-cyan-600 focus:ring-cyan-500 border-gray-300 cursor-pointer" />
-                                    <span className="text-[11px] font-bold text-gray-600">Não</span>
-                                  </label>
+                                <div className="flex items-center justify-center gap-2">
+                                  {(['Sim', 'Não'] as const).map(opt => {
+                                    const isSelected = log[field] === opt; // Verifica se este botão já está selecionado
+
+                                    return (
+                                      <button
+                                        key={opt}
+                                        type="button"
+                                        // 🟢 A MÁGICA ACONTECE AQUI: Se já estiver selecionado, passa null (desmarca). Senão, passa a opção ('Sim' ou 'Não')
+                                        onClick={() => updateCleaning(log.id, field, isSelected ? null : opt)}
+                                        className={`px-2 py-1 rounded font-black text-[10px] transition-all ${isSelected
+                                          ? (opt === 'Sim' ? 'bg-cyan-600 text-white shadow' : 'bg-red-500 text-white shadow')
+                                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
+                                          }`}
+                                      >
+                                        {opt}
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               </td>
                             ))}
-
                             <td className="p-2">
                               <SignatureSelector value={log.responsavel} onChange={(v) => updateCleaning(log.id, 'responsavel', v)} />
                             </td>
@@ -498,8 +668,7 @@ export default function InspecaoPage() {
           </div>
 
           <div className="text-center text-[11px] text-gray-500 space-y-1.5">
-            <p>GrandValle © {new Date().getFullYear()} • Documento: {docInfo.code} - {docInfo.name}</p>
-            <p>Última revisão: 02/01/2026</p>
+            <p>GrandValle © {new Date().getFullYear()} • {docInfo.name}</p>
           </div>
         </div>
       </div>

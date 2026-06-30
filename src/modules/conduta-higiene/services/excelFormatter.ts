@@ -1,13 +1,11 @@
 "use client";
 
 import * as ExcelJS from "exceljs";
-import { ChecklistRow, ActionPlan, LavagemLog, QUESTIONS, DAYS, CondutaTabType } from "../model/condutaModel";
+import { ChecklistRow, ActionPlan, LavagemLog, QUESTIONS, DAYS, generateWeekDays, CondutaTabType } from "../model/condutaModel";
 
 // --- HELPERS GERAIS ---
 const formatName = (str: string) => (!str ? "" : str.startsWith("data:image") ? "ASSINADO DIGITALMENTE" : str.replace(/_/g, " ").toUpperCase());
-const normalizeFileName = (str: string) => (!str ? "" : str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").toLowerCase());
 
-// 🟢 FUNÇÃO SEGURA PARA DATAS ADICIONADA AQUI
 const formatSafeDate = (dateStr: string) => {
     if (!dateStr) return "";
     if (dateStr.includes("-")) {
@@ -18,15 +16,33 @@ const formatSafeDate = (dateStr: string) => {
 };
 
 const fetchSignatureImage = async (baseName: string) => {
+    const originalName = baseName.replace(/_/g, " ");
     const baseUrl = window.location.origin;
-    const withSpaces = baseName.replace(/_/g, " ");
-    const tentativas = [`${baseName}.png`, `${withSpaces}.png`, `${withSpaces.toUpperCase()}.png`, `${baseName}.jpg`];
+
+    const encoded = encodeURIComponent(originalName);
+    const withoutAccents = originalName
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, " ");
+
+    const tentativas = [
+        `${encoded}.png`,
+        `${encoded}.jpg`,
+        `${encodeURIComponent(withoutAccents)}.png`,
+        `${encodeURIComponent(withoutAccents)}.jpg`,
+        `${encodeURIComponent(originalName.toUpperCase())}.png`,
+    ];
 
     for (const fileName of tentativas) {
         try {
             const res = await fetch(`${baseUrl}/assinaturas/${fileName}`);
-            if (res.ok) return { buffer: await res.blob().then(b => b.arrayBuffer()), ext: fileName.endsWith('.jpg') ? 'jpeg' : 'png' };
-        } catch (e) { }
+            if (res.ok) {
+                const blob = await res.blob();
+                const buffer = await blob.arrayBuffer();
+                const ext = fileName.endsWith('.jpg') ? 'jpeg' : 'png';
+                return { buffer, ext };
+            }
+        } catch (e) { /* ignora */ }
     }
     return null;
 };
@@ -44,6 +60,17 @@ const applyDataStyle = (cell: ExcelJS.Cell, isCenter = true) => {
     cell.alignment = { horizontal: isCenter ? "center" : "left", vertical: "middle", wrapText: true };
 };
 
+const extrairPeriodoSemana = (weekString: string): string => {
+    const weekDays = generateWeekDays(weekString);
+    if (weekDays.length === 0) return weekString;
+    const primeiro = weekDays[0].label.match(/\((\d{2}\/\d{2})\)/)?.[1];
+    const ultimo = weekDays[weekDays.length - 1].label.match(/\((\d{2}\/\d{2})\)/)?.[1];
+    if (!primeiro || !ultimo) return weekString;
+    const anoMatch = weekString.match(/\d{4}/);
+    const ano = anoMatch ? anoMatch[0] : new Date().getFullYear().toString();
+    return `${primeiro} a ${ultimo}/${ano}`;
+};
+
 interface ExportCondutaParams {
     activeTab: CondutaTabType;
     week: string;
@@ -51,29 +78,37 @@ interface ExportCondutaParams {
     checklist: ChecklistRow[];
     actions: ActionPlan[];
     lavagemLogs: LavagemLog[];
-    localLavagem: string;
+    colaboradores: any[]; // 🔥 Adicionado a lista completa para mapear os status na exportação
 }
 
-// 🟢 ALTERAÇÃO NO RETORNO: Promise<Blob> para devolver o arquivo
-export const exportCondutaToExcel = async ({ activeTab, week, signatures, checklist, actions, lavagemLogs, localLavagem }: ExportCondutaParams): Promise<Blob> => {
+export const exportCondutaToExcel = async ({
+    activeTab,
+    week,
+    signatures,
+    checklist,
+    actions,
+    lavagemLogs,
+    colaboradores // 🔥 Recebido aqui para fazermos os cruzamentos de cores
+}: ExportCondutaParams): Promise<Blob> => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(activeTab === "inspecao" ? "Conduta e Saúde" : "Lavagem de Mãos");
     const baseUrl = window.location.origin;
 
-    // --- 1. CONFIGURAÇÃO DE COLUNAS E PÁGINA ---
-    const maxCol = activeTab === "inspecao" ? 8 : 1 + (DAYS.length * 2);
+    const weekDays = generateWeekDays(week);
+    const maxCol = activeTab === "inspecao" ? 2 + DAYS.length : 1 + (weekDays.length * 2);
 
     worksheet.pageSetup = { paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 } };
 
     if (activeTab === "inspecao") {
-        worksheet.columns = [{ width: 14 }, { width: 85 }, { width: 15 }, { width: 22 }, { width: 18 }, { width: 18 }, { width: 14 }, { width: 14 }];
+        worksheet.getColumn(1).width = 14;
+        worksheet.getColumn(2).width = 85;
+        for (let i = 3; i <= 2 + DAYS.length; i++) worksheet.getColumn(i).width = 14;
     } else {
         worksheet.getColumn(1).width = 45;
         let cIdx = 2;
-        DAYS.forEach(() => { worksheet.getColumn(cIdx).width = 12; worksheet.getColumn(cIdx + 1).width = 12; cIdx += 2; });
+        weekDays.forEach(() => { worksheet.getColumn(cIdx).width = 12; worksheet.getColumn(cIdx + 1).width = 12; cIdx += 2; });
     }
 
-    // --- 2. LOGO E CABEÇALHO UNIFICADO ---
     worksheet.addRow([]).height = 70;
     try {
         const logoRes = await fetch(`${baseUrl}/logo.png`);
@@ -82,9 +117,18 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
 
     worksheet.addRow([]);
 
+    const periodo = extrairPeriodoSemana(week);
+
     const titleConfig = activeTab === "inspecao"
-        ? { title: "MONITORAMENTO DE CONDUTA E SAÚDE", meta: ["Área: Packing Manga", `Período da semana: ${week}`, "Código: PHU-2.9.7"] }
-        : { title: "MONITORAMENTO DE LAVAGEM DE MÃOS", meta: [`Local: ${localLavagem || "Não Definido"}  |  Código: PHU-2.9.1`, `Exportado em: ${new Date().toLocaleString("pt-BR")}`] };
+        ? { title: "MONITORAMENTO DE CONDUTA E SAÚDE", meta: ["Área: Packing Manga", `Período da semana: ${periodo}`, "Código: PHU-2.9.7"] }
+        : {
+            title: "MONITORAMENTO DE LAVAGEM DE MÃOS",
+            meta: [
+                `Local: Packing House  |  Código: PHU-2.9.1`,
+                `Período: ${periodo}`,
+                `Exportado em: ${new Date().toLocaleString("pt-BR")}`
+            ]
+        };
 
     const titleRow = worksheet.addRow([titleConfig.title]);
     worksheet.mergeCells(titleRow.number, 1, titleRow.number, maxCol);
@@ -97,7 +141,6 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
     });
     worksheet.addRow([]);
 
-    // --- FUNÇÃO DE ASSINATURA REUTILIZÁVEL ---
     const addTableSignature = async (val: string | null, rNum: number, cNum: number, w = 130, h = 35, offX = 0.02) => {
         if (!val) return;
         const imgFile = val.startsWith("data:image") ? { base64: val.split(",")[1], ext: "png" } : await fetchSignatureImage(val);
@@ -109,7 +152,6 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
 
     // --- 3. DADOS: INSPEÇÃO DE CONDUTA ---
     if (activeTab === "inspecao") {
-        // Assinatura Cabeçalho
         const sigRow = worksheet.addRow(["Auxiliar de Segurança:", ""]); sigRow.height = 38;
         const nameRow = worksheet.addRow(["", formatName(signatures.coordinator || "")]); nameRow.height = 18;
         worksheet.mergeCells(sigRow.number, 1, nameRow.number, 1);
@@ -118,8 +160,7 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
         await addTableSignature(signatures.coordinator, sigRow.number, 2);
         worksheet.addRow([]);
 
-        // Tabela Checklist
-        const headerRow = worksheet.addRow(["Inspeção - Itens Observados", "", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"]);
+        const headerRow = worksheet.addRow(["Inspeção - Itens Observados", "", ...DAYS]);
         worksheet.mergeCells(headerRow.number, 1, headerRow.number, 2);
         headerRow.eachCell(applyHeaderStyle);
 
@@ -134,7 +175,6 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
             });
         });
 
-        // Plano de Ação
         const filledActions = actions.filter(row => !!String(row.date || "").trim() || !!String(row.nonConformity || "").trim() || !!String(row.action || "").trim());
         if (filledActions.length > 0) {
             worksheet.addRow([]); worksheet.addRow([]);
@@ -148,7 +188,7 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
             for (const row of filledActions) {
                 const rawName = formatName(row.responsible || "______________________");
                 const dataRow = worksheet.addRow([
-                    formatSafeDate(row.date), // 🟢 DATA SEGURA APLICADA AQUI
+                    formatSafeDate(row.date),
                     row.nonConformity || "", row.rootCause || "", row.action || "",
                     `\n\n\n${rawName}`, "", row.status === "completed" ? "CONCLUÍDO" : row.status === "in_progress" ? "EM ANDAMENTO" : "PENDENTE", ""
                 ]);
@@ -169,9 +209,9 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
         worksheet.getCell(rowDia.number, 1).value = "Colaborador";
 
         let colIdx = 2;
-        DAYS.forEach(day => {
+        weekDays.forEach(day => {
             worksheet.mergeCells(rowDia.number, colIdx, rowDia.number, colIdx + 1);
-            worksheet.getCell(rowDia.number, colIdx).value = day.toUpperCase();
+            worksheet.getCell(rowDia.number, colIdx).value = day.label;
             worksheet.getCell(rowHora.number, colIdx).value = "09h";
             worksheet.getCell(rowHora.number, colIdx + 1).value = "14h";
             colIdx += 2;
@@ -181,13 +221,56 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
 
         lavagemLogs.filter(log => !!String(log.colaborador || "").trim() && !log.colaborador?.startsWith("-")).forEach((log) => {
             const rowData = [log.colaborador || ""];
-            DAYS.forEach(day => { rowData.push(log.dias?.[day]?.manha || ""); rowData.push(log.dias?.[day]?.tarde || ""); });
+            weekDays.forEach(day => {
+                const m = log.dias?.[day.short]?.manha;
+                const t = log.dias?.[day.short]?.tarde;
+                rowData.push(m === "C" ? "SIM" : m === "NC" ? "NÃO" : "");
+                rowData.push(t === "C" ? "SIM" : t === "NC" ? "NÃO" : "");
+            });
             const dataRow = worksheet.addRow(rowData);
             dataRow.height = 28;
+
+            // 🔥 BUSCA O STATUS REAL DO COLABORADOR NA LISTA COMPLETA DO BANCO
+            const colabInfo = colaboradores.find(c => c.nome?.trim().toUpperCase() === log.colaborador?.trim().toUpperCase());
+            const isDesligado = colabInfo?.ativo === false;
+            const isEfetivo = colabInfo?.tipo?.toUpperCase() === "EFETIVO";
+            const isContratado = colabInfo?.tipo?.toUpperCase() === "CONTRATADO";
+
             dataRow.eachCell((c, i) => {
                 applyDataStyle(c, i > 1);
-                if (c.value === "C") { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F4EA" } }; c.font = { bold: true, color: { argb: "FF137333" } }; }
-                if (c.value === "NC") { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE8E6" } }; c.font = { bold: true, color: { argb: "FFC5221F" } }; }
+
+                // 1. PRIMEIRA CÉLULA: Nome do Colaborador (Aplica as regras de cores de Contrato)
+                if (i === 1) {
+                    if (isDesligado) {
+                        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } }; // Cinza claro
+                        // 🔥 A correção está aqui: use "strike" em vez de "strikeThrough"
+                        c.font = { bold: true, color: { argb: "FF9CA3AF" }, strike: true } as any;
+                    } else if (isEfetivo) {
+                        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD1FAE5" } }; // Verde clarinho
+                        c.font = { bold: true, color: { argb: "FF065F46" } };
+                    } else if (isContratado) {
+                        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FEF3C7" } }; // Amarelo/Amber clarinho
+                        c.font = { bold: true, color: { argb: "FF92400E" } };
+                    }
+                }
+                // 2. RESTANTE DAS CÉLULAS: Células de preenchimento de turnos (SIM / NÃO / VAZIO)
+                else {
+                    if (isDesligado) {
+                        // Se a pessoa foi desligada, toda a linha de turnos dela fica cinza chapado
+                        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+                        c.font = { color: { argb: "FF9CA3AF" } };
+                    } else {
+                        // Se estiver ativo, preserva o comportamento normal do SIM/NÃO
+                        if (c.value === "SIM") {
+                            c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F4EA" } };
+                            c.font = { bold: true, color: { argb: "FF137333" } };
+                        }
+                        if (c.value === "NÃO") {
+                            c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE8E6" } };
+                            c.font = { bold: true, color: { argb: "FFC5221F" } };
+                        }
+                    }
+                }
             });
         });
     }
@@ -198,18 +281,19 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
     worksheet.mergeCells(worksheet.rowCount, 1, worksheet.rowCount, maxCol);
 
     if (activeTab === "inspecao") {
-        worksheet.addRow(["• SIM: Conforme padrões de higiene. | • NÃO: Irregularidade. Requer preenchimento do Plano de Ação."]).getCell(1).font = { size: 9 };
+        worksheet.addRow(["• SIM: Conforme padrões de higiene. | • NÃO: Higienização inadequada ou não realizada."]).getCell(1).font = { size: 9 };
     } else {
         const comboRow = worksheet.addRow([""]);
         worksheet.mergeCells(comboRow.number, 1, comboRow.number, maxCol);
         comboRow.getCell(1).value = {
             richText: [
-                { font: { bold: true, size: 8.5 }, text: "Legenda: " }, { font: { size: 8.5 }, text: "C: Conforme | NC: Não Conforme\n" },
+                { font: { bold: true, size: 8.5 }, text: "Legenda: " }, { font: { size: 8.5 }, text: "SIM: Conforme | NÃO: Higienização inadequada ou não realizada\n" },
+                { font: { bold: true, size: 8.5 }, text: "Tipos de Contrato (Cores): " }, { font: { size: 8.5, color: { argb: "FF137333" } }, text: "Verde: Efetivo" }, { font: { size: 8.5 }, text: " | " }, { font: { size: 8.5, color: { argb: "FF92400E" } }, text: "Amarelo: Contratado" }, { font: { size: 8.5 }, text: " | " }, { font: { size: 8.5, color: { argb: "FF6B7280" } }, text: "Cinza Linha Inteira: Desligado na Semana\n" },
                 { font: { bold: true, size: 8.5 }, text: "É Proibido: " }, { font: { size: 8.5 }, text: "Fumar • Unhas grandes/esmaltes • Adornos (Anel, Relógio, Brincos) • Perfume • Sem touca • Uniforme sujo\n" },
                 { font: { bold: true, size: 8.5 }, text: "Produtos: " }, { font: { size: 8.5 }, text: "Sabão de mãos • Álcool gel 70% • Secador de mãos" }
             ]
         };
-        applyDataStyle(comboRow.getCell(1), false); comboRow.height = 54;
+        applyDataStyle(comboRow.getCell(1), false); comboRow.height = 68;
     }
 
     worksheet.addRow([]);
@@ -220,7 +304,5 @@ export const exportCondutaToExcel = async ({ activeTab, week, signatures, checkl
     });
 
     const buffer = await workbook.xlsx.writeBuffer();
-
-    // 🟢 EM VEZ DE BAIXAR, NÓS DEVOLVEMOS O ARQUIVO (Blob)
     return new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 };

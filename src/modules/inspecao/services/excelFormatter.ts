@@ -17,7 +17,8 @@ import {
 // --- HELPERS GERAIS ---
 const formatName = (str: string) => {
     if (!str) return "";
-    if (str.startsWith("data:image")) return "[ASSINATURA DIGITAL]";
+    // Se for uma data:image, não tentamos formatar como nome
+    if (str.startsWith("data:image")) return "";
     return str.replace(/_/g, " ").toUpperCase();
 };
 
@@ -50,19 +51,44 @@ const applyDataStyle = (cell: ExcelJS.Cell, isCenter = true) => {
     cell.alignment = { horizontal: isCenter ? "center" : "left", vertical: "middle", wrapText: true };
 };
 
+const applyColorIfSimNao = (cell: ExcelJS.Cell) => {
+    if (cell.value === "SIM") {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F4EA" } };
+        cell.font = { bold: true, color: { argb: "FF137333" } };
+    } else if (cell.value === "NÃO") {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE8E6" } };
+        cell.font = { bold: true, color: { argb: "FFC5221F" } };
+    }
+};
+
+// 🟢 CORREÇÃO: Função garante o texto e a imagem simultaneamente
 const addTableSignature = async (workbook: ExcelJS.Workbook, worksheet: ExcelJS.Worksheet, val: string | null, rNum: number, cNum: number, cell: ExcelJS.Cell) => {
     if (!val) return;
-    const imgFile = val.startsWith("data:image") ? { base64: val.split(",")[1], ext: "png" } : await fetchSignatureImage(val);
 
-    cell.value = formatName(val);
-    cell.font = { size: 8, bold: true, color: { argb: "FF003366" } };
-    cell.alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
+    // Adiciona o texto (nome) sempre
+    const nome = formatName(val);
+
+    // Se for uma assinatura (data:image ou nome de arquivo), busca a imagem
+    const imgFile = val.startsWith("data:image")
+        ? { base64: val.split(",")[1], ext: "png" }
+        : await fetchSignatureImage(val);
 
     if (imgFile) {
-        const imgId = workbook.addImage(val.startsWith("data:image") ? { base64: (imgFile as any).base64, extension: "png" } : { buffer: (imgFile as any).buffer, extension: (imgFile as any).ext });
-        worksheet.addImage(imgId, { tl: { col: cNum - 1 + 0.1, row: rNum - 1 + 0.1 }, ext: { width: 110, height: 35 }, editAs: "oneCell" });
-        cell.value = `\n\n\n${formatName(val)}`;
+        const imgId = workbook.addImage(val.startsWith("data:image")
+            ? { base64: (imgFile as any).base64, extension: "png" }
+            : { buffer: (imgFile as any).buffer, extension: (imgFile as any).ext });
+
+        // Adiciona a imagem acima do texto
+        worksheet.addImage(imgId, { tl: { col: cNum - 1 + 0.15, row: rNum - 1 + 0.15 }, ext: { width: 150, height: 60 }, editAs: "oneCell" });
+
+        // Usa quebra de linha para empurrar o nome para baixo da imagem
+        cell.value = `\n\n\n\n${nome}`;
+    } else {
+        cell.value = nome;
     }
+
+    cell.font = { size: 9, bold: true, color: { argb: "FF003366" } };
+    cell.alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
 };
 
 interface ExportInspecaoParams {
@@ -78,10 +104,9 @@ interface ExportInspecaoParams {
 
 export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpData, actionPlans, transportLogs, packagingLogs, currentCleaningLogs, selectedCleaningProduct }: ExportInspecaoParams) => {
     const workbook = new ExcelJS.Workbook();
-    const dateLabel = new Date().toISOString().split("T")[0];
 
     const docMap: Record<TabType, { code: string; title: string; maxCol: number }> = {
-        pre_inspecao: { code: "2.11.7", title: "PRÉ-INSPEÇÃO OPERACIONAL", maxCol: 2 + WEEK_DAYS.length }, // maxCol = 8
+        pre_inspecao: { code: "2.11.7", title: "PRÉ-INSPEÇÃO OPERACIONAL", maxCol: 2 + WEEK_DAYS.length },
         transporte: { code: "PHU-031", title: "INSPEÇÃO DE TRANSPORTE DE COLHEITA", maxCol: 6 },
         embalagem: { code: "PHU-032", title: "INSPEÇÃO DE MATERIAL DE EMBALAGEM", maxCol: 10 },
         limpeza: { code: "PHU-036", title: "RECEBIMENTO DE MATERIAL DE LIMPEZA", maxCol: 8 },
@@ -102,8 +127,8 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
     };
 
     if (activeTabParam === "pre_inspecao") {
-        ws.getColumn(1).width = 15; // 🟢 DIMINUÍDO de 24 para 15 (Mais justo)
-        ws.getColumn(2).width = 45;
+        ws.getColumn(1).width = 18;
+        ws.getColumn(2).width = 60;
         WEEK_DAYS.forEach((_, i) => ws.getColumn(3 + i).width = 12);
     } else if (activeTabParam === "transporte") {
         ws.columns = [{ width: 18 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 16 }, { width: 30 }];
@@ -139,11 +164,10 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
     });
     ws.addRow([]);
 
-    // 🟢 ASSINATURA DO COORDENADOR
+    // ASSINATURA DO COORDENADOR
     if (activeTabParam === "pre_inspecao" && preOpInfo?.coordinator) {
-        // Texto reduzido para não espremer na coluna 1
         const coordRow = ws.addRow(["Coordenador:", ""]);
-        coordRow.height = 55;
+        coordRow.height = 75; // Altura ajustada
         coordRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF1F2937" } };
         coordRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
 
@@ -153,7 +177,7 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
         const labelRow = ws.addRow(["Coordenador:"]);
         labelRow.getCell(1).font = { bold: true, size: 10 };
         const sigRow = ws.addRow([""]);
-        sigRow.height = 55;
+        sigRow.height = 75; // Altura ajustada
         await addTableSignature(workbook, ws, preOpInfo.coordinator, sigRow.number, 1, sigRow.getCell(1));
         ws.addRow([]);
     }
@@ -164,19 +188,21 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
         const headerRow = ws.addRow(headers);
         headerRow.height = 24; headerRow.eachCell(applyHeaderStyle);
 
-        // 🟢 NÚMERO DO ITEM ADICIONADO AQUI
         preOpData.filter(x => x.item).forEach((row, index) => {
-            const numeroItem = row.id || (index + 1); // Pega o ID ou cria uma sequência visual
+            const numeroItem = row.id || (index + 1);
             const dataRow = ws.addRow([
                 row.category || "",
-                `${numeroItem}. ${row.item}`, // Une o número com o texto
+                `${numeroItem}. ${row.item}`,
                 ...WEEK_DAYS.map(d => row.checks?.[d.short] === "C" ? "SIM" : row.checks?.[d.short] === "NC" ? "NÃO" : "")
             ]);
-            dataRow.height = 24;
-            dataRow.eachCell((c, i) => applyDataStyle(c, i > 2));
+            dataRow.height = 45;
+            dataRow.eachCell((c, i) => {
+                applyDataStyle(c, i > 2);
+                applyColorIfSimNao(c);
+            });
         });
 
-        // 🟢 PLANO DE AÇÃO CORRETIVA COM MESCLAGEM CORRIGIDA
+        // PLANO DE AÇÃO CORRETIVA
         const filledActions = actionPlans.filter(row => !!String(row.item || "").trim() || !!String(row.naoConformidade || "").trim());
         if (filledActions.length > 0) {
             ws.addRow([]); ws.addRow([]);
@@ -190,12 +216,12 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
             headerArr[1] = "Item";
             headerArr[2] = "Não Conformidade";
             headerArr[4] = "Ação Corretiva";
-            headerArr[6] = "Responsável"; // Fica na coluna 7 (índice 6)
+            headerArr[6] = "Responsável";
 
             const aHeader = ws.addRow(headerArr);
-            ws.mergeCells(aHeader.number, 3, aHeader.number, 4); // Não Conformidade usa as colunas 3 e 4
-            ws.mergeCells(aHeader.number, 5, aHeader.number, 6); // Ação usa as colunas 5 e 6
-            ws.mergeCells(aHeader.number, 7, aHeader.number, 8); // Responsável agora é LARGO, usa colunas 7 e 8!
+            ws.mergeCells(aHeader.number, 3, aHeader.number, 4);
+            ws.mergeCells(aHeader.number, 5, aHeader.number, 6);
+            ws.mergeCells(aHeader.number, 7, aHeader.number, 8);
             aHeader.eachCell(c => { applyHeaderStyle(c); c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B5563" } }; });
 
             for (const row of filledActions) {
@@ -208,11 +234,10 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
                 const dataRow = ws.addRow(rowArr);
                 ws.mergeCells(dataRow.number, 3, dataRow.number, 4);
                 ws.mergeCells(dataRow.number, 5, dataRow.number, 6);
-                ws.mergeCells(dataRow.number, 7, dataRow.number, 8); // Mescla também nos dados
-                dataRow.height = 55;
+                ws.mergeCells(dataRow.number, 7, dataRow.number, 8);
+                dataRow.height = 75; // Altura maior para assinatura
                 dataRow.eachCell((c, i) => applyDataStyle(c, i === 1 || i >= 7));
 
-                // Assinatura inserida na coluna 7 (que está mesclada com a 8)
                 await addTableSignature(workbook, ws, row.responsavel || null, dataRow.number, 7, dataRow.getCell(7));
             }
         }
@@ -231,7 +256,11 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
                 log.contentorLimpo === "C" ? "SIM" : log.contentorLimpo === "NC" ? "NÃO" : "",
                 ""
             ]);
-            dataRow.height = 55; dataRow.eachCell(c => applyDataStyle(c, true));
+            dataRow.height = 75; // Altura maior
+            dataRow.eachCell(c => {
+                applyDataStyle(c, true);
+                applyColorIfSimNao(c);
+            });
             await addTableSignature(workbook, ws, log.monitor || null, dataRow.number, 6, dataRow.getCell(6));
         }
     }
@@ -253,8 +282,11 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
                 log.obs || "",
                 ""
             ]);
-            dataRow.height = 55;
-            dataRow.eachCell((c, i) => applyDataStyle(c, i !== 2 && i !== 9));
+            dataRow.height = 75; // Altura maior
+            dataRow.eachCell((c, i) => {
+                applyDataStyle(c, i !== 2 && i !== 9);
+                applyColorIfSimNao(c);
+            });
             await addTableSignature(workbook, ws, log.responsavel || null, dataRow.number, 10, dataRow.getCell(10));
         }
     }
@@ -274,8 +306,11 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
                 log.cumprePedido ? log.cumprePedido.toUpperCase() : "",
                 ""
             ]);
-            dataRow.height = 55;
-            dataRow.eachCell((c, i) => applyDataStyle(c, i !== 2));
+            dataRow.height = 75; // Altura maior
+            dataRow.eachCell((c, i) => {
+                applyDataStyle(c, i !== 2);
+                applyColorIfSimNao(c);
+            });
             await addTableSignature(workbook, ws, log.responsavel || null, dataRow.number, 8, dataRow.getCell(8));
         }
     }
@@ -318,6 +353,5 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer]);
-    saveAs(blob, `inspecao_${activeTabParam}_${dateLabel}.xlsx`);
     return blob;
 };

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import Link from "next/link";
 import {
     FaDroplet,
     FaClipboardCheck,
@@ -10,8 +12,12 @@ import {
     FaQuestion,
     FaIndustry,
     FaRegCalendar,
+    FaDatabase,
 } from "react-icons/fa6";
+import { ShieldCheck, Stethoscope } from "lucide-react";
+import { useDashboardController } from "@/modules/dashboard/controller/useDashboardController";
 
+// Mapeamento de ícones (agora com todos os ícones importados)
 const IconMap: Record<string, React.ElementType> = {
     droplet: FaDroplet,
     clipboard: FaClipboardCheck,
@@ -19,10 +25,10 @@ const IconMap: Record<string, React.ElementType> = {
     flask: FaFlaskVial,
     shield: FaUserShield,
     wrench: FaScrewdriverWrench,
+    "shield-check": ShieldCheck,
+    stethoscope: Stethoscope,
+    database: FaDatabase,
 };
-
-import Link from "next/link";
-import { useDashboardController } from "@/modules/dashboard/controller/useDashboardController";
 
 export function DashboardPage() {
     const {
@@ -36,15 +42,22 @@ export function DashboardPage() {
     const totalSystems = systems.length;
     const activeSystems = systems.length;
 
+    // Estado para armazenar a data atual (apenas no cliente)
+    const [currentDate, setCurrentDate] = useState<string>("");
+
+    useEffect(() => {
+        // Define a data apenas no cliente, após a montagem
+        setCurrentDate(new Date().toLocaleDateString("pt-BR"));
+    }, []);
+
     return (
         <div className="min-h-screen bg-linear-to-br from-slate-100 to-slate-200 p-4 md:p-8 font-sans">
             <div className="max-w-7xl mx-auto">
 
-                {/* HEADER SUPER FLUTUANTE - AGORA COM DESTAQUE PREMIUM (ESCURO) */}
+                {/* HEADER */}
                 <header className="bg-gradient-to-r from-[#1e1b4b] via-[#312e81] to-[#4338ca] rounded-3xl shadow-[0_20px_50px_-12px_rgba(49,46,129,0.5)] mb-8 overflow-hidden border border-indigo-800 relative z-10">
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6 p-8">
                         <div className="flex items-center gap-4 flex-1 min-w-0">
-                            {/* ÍCONE COM FUNDO DE VIDRO */}
                             <div className="w-16 h-16 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-lg">
                                 <FaIndustry className="text-white text-3xl" />
                             </div>
@@ -59,7 +72,6 @@ export function DashboardPage() {
                         </div>
 
                         <div className="flex items-center gap-6">
-                            {/* CARD DE SISTEMAS ATIVOS - AGORA TOTALMENTE BRANCO PARA DAR CONTRASTE */}
                             <div className="rounded-2xl bg-white px-6 py-4 flex items-center gap-4 shadow-xl border border-indigo-50">
                                 <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center">
                                     <FaClipboardCheck className="text-indigo-600 text-xl" />
@@ -73,12 +85,11 @@ export function DashboardPage() {
                     </div>
                 </header>
 
-                {/* FILTROS (TAGS) FLUTUANTES  */}
+                {/* FILTROS */}
                 <div className="flex items-center sm:justify-center gap-2 mb-12 overflow-x-auto hide-scrollbar w-full px-2 py-2">
                     {systemCategories.map((cat) => {
                         const isSelected = selectedCategory === cat.id;
 
-                        // Lógica de Cores com Elevação (Efeito Flutuante)
                         let activeClass = "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-[0_10px_20px_-5px_rgba(79,70,229,0.4)] border-transparent transform -translate-y-1";
                         let inactiveClass = "bg-white text-gray-600 hover:text-indigo-600 border border-gray-200 shadow-sm hover:shadow-md hover:-translate-y-0.5";
                         let badgeClass = isSelected ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500";
@@ -113,9 +124,7 @@ export function DashboardPage() {
                             <button
                                 key={cat.id}
                                 onClick={() => setSelectedCategory(cat.id as typeof selectedCategory)}
-                                // CLASSES AJUSTADAS: Menor padding, fonte text-[11px], shrink-0 e whitespace-nowrap
-                                className={`px-4 py-2 rounded-full font-bold text-[11px] uppercase tracking-wider whitespace-nowrap shrink-0 transition-all duration-300 active:scale-95 flex items-center gap-1.5 ${isSelected ? activeClass : inactiveClass
-                                    }`}
+                                className={`px-4 py-2 rounded-full font-bold text-[11px] uppercase tracking-wider whitespace-nowrap shrink-0 transition-all duration-300 active:scale-95 flex items-center gap-1.5 ${isSelected ? activeClass : inactiveClass}`}
                             >
                                 {cat.name}
                                 {cat.id !== "all" && (
@@ -181,12 +190,13 @@ export function DashboardPage() {
                                         </div>
                                         <div className="pt-4 border-t border-gray-100">
                                             <div className="flex items-center justify-between text-xs">
-                                                {/* 👇 Voltamos com o calendário mostrando a data de hoje */}
                                                 <div className="flex items-center gap-2 text-gray-400">
                                                     <FaRegCalendar />
-                                                    <span>{new Date().toLocaleDateString("pt-BR")}</span>
+                                                    {/* Data agora usando o estado, que só é preenchido no cliente */}
+                                                    <span suppressHydrationWarning>
+                                                        {currentDate || "Carregando..."}
+                                                    </span>
                                                 </div>
-
                                                 <button className="text-blue-600 font-bold hover:text-blue-800 transition-colors group-hover:translate-x-1 transform duration-200 flex items-center gap-1">
                                                     Acessar
                                                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M9 5l7 7-7 7" /></svg>
@@ -219,7 +229,10 @@ export function DashboardPage() {
                         <div className="text-center md:text-right">
                             <p className="text-gray-400 text-xs uppercase tracking-widest font-bold mb-0.5">Versão do Sistema</p>
                             <p className="font-bold text-gray-800 bg-gray-50 px-3 py-1 rounded-lg border border-gray-100">
-                                v3.2.1 • Atualizado em {new Date().toLocaleDateString("pt-BR")}
+                                v3.2.1 • Atualizado em{" "}
+                                <span suppressHydrationWarning>
+                                    {currentDate || "Carregando..."}
+                                </span>
                             </p>
                         </div>
                     </div>

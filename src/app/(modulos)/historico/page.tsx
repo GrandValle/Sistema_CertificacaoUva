@@ -14,7 +14,7 @@ import { obterHistorico, getUrlDownload, deletarRegistro } from "../../../servic
 interface HistoricColumn {
     key: string;
     label: string;
-    render?: (value: any) => React.ReactNode;
+    render?: (value: any, record?: any) => React.ReactNode;
 }
 
 interface FilterOption {
@@ -31,6 +31,7 @@ const BACKEND_ROUTES_MAP: Record<string, string> = {
     qualidade: "controle_qualidade",
     estoque: "estoque_material",
     inspecao: "inspecao_operacional",
+    visitantes: "questionario_visitante",
 };
 
 function HistoricoPageContent() {
@@ -62,16 +63,18 @@ function HistoricoPageContent() {
 
                 const normalized = data.map((record: any) => {
                     // Acessa o primeiro item do array 'arquivos' (se existir)
-                    const arquivo = record.arquivos?.[0];
+                    const arquivo = record.documentos?.[0];
 
                     return {
                         id: record.id,
+                        nome: record.nome || "",
+                        empresa: record.empresa || "",
                         mes: record.mes || record.semana || "-",
                         area: record.setor || record.area || record.tipo || record.aba || "-",
                         frequencia: record.frequencia || "-",
                         status: String(record.status || "completo").toLowerCase(),
-                        // Agora acessamos as propriedades dentro de 'arquivo'
                         exportedAt: arquivo?.criadoEm || record.createdAt || new Date().toISOString(),
+                        // O ID do arquivo precisa ser pego corretamente
                         arquivoId: arquivo?.id,
                         fileName: arquivo?.nomeArquivo
                     };
@@ -209,6 +212,19 @@ function HistoricoPageContent() {
                 { key: "mes", label: "Mês / Ano" },
                 { key: "area", label: "Área" },
                 { key: "exportedAt", label: "Exportado em", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") },
+            ] as HistoricColumn[],
+        },
+        visitantes: {
+            title: "Histórico de Visitantes (PHU-038)",
+            description: "Consulte os questionários de saúde assinados pelos visitantes.",
+            backLink: "/questionario-visitantes",
+            backText: "Voltar para o Questionário",
+            customFilter: null, // Deixamos nulo pois não tem "Área"
+            columns: [
+                { key: "id", label: "ID", render: renderIdShort },
+                { key: "exportedAt", label: "Data de Cadastro", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") },
+                { key: "nome", label: "Nome do Visitante", render: (val: string) => val || "Não informado" },
+                { key: "empresa", label: "Empresa", render: (val: string) => val || "-" }
             ] as HistoricColumn[],
         },
     };

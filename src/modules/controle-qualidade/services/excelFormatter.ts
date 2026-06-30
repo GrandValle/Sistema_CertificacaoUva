@@ -25,7 +25,6 @@ const normalizeFileName = (str: string) => {
         .toLowerCase();
 };
 
-// 🟢 FUNÇÃO SEGURA PARA DATAS
 const formatSafeDate = (dateStr: string) => {
     if (!dateStr) return "";
     if (dateStr.includes("-")) {
@@ -53,6 +52,29 @@ const fetchSignatureImage = async (baseName: string) => {
     return null;
 };
 
+const addTopSignature = (
+    worksheet: ExcelJS.Worksheet,
+    workbook: ExcelJS.Workbook,
+    imageData: { buffer?: ArrayBuffer; base64?: string; ext: string },
+    rowNumber: number,
+    colNumber: number,
+    imgWidth: number = 180,
+    imgHeight: number = 50
+) => {
+    const imgId = workbook.addImage(
+        imageData.buffer
+            ? { buffer: imageData.buffer, extension: imageData.ext as any }
+            : { base64: imageData.base64!, extension: imageData.ext as any }
+    );
+
+    const colOffset = 0.3;
+    worksheet.addImage(imgId, {
+        tl: { col: colNumber - 1 + colOffset, row: rowNumber - 1 },
+        ext: { width: imgWidth, height: imgHeight },
+        editAs: 'oneCell'
+    });
+};
+
 interface ExportExcelParams {
     activeTab: string;
     vidrosDate?: string;
@@ -63,6 +85,11 @@ interface ExportExcelParams {
     pragasLogs?: any[];
     inusuaisLogs?: any[];
     rejeitosLogs?: any[];
+    actionPlans?: any[];
+    responsavel?: string | null;
+    respPacking?: string | null;
+    pragasColunas?: string[];
+    pragasSetores?: string[];
 }
 
 export const exportControleQualidadeToExcel = async ({
@@ -74,26 +101,51 @@ export const exportControleQualidadeToExcel = async ({
     vidrosLogs = [],
     pragasLogs = [],
     inusuaisLogs = [],
-    rejeitosLogs = []
+    rejeitosLogs = [],
+    actionPlans = [],
+    responsavel: responsavelParam,
+    respPacking: respPackingParam,
+    pragasColunas: pragasColunasParam,
+    pragasSetores: pragasSetoresParam,
 }: ExportExcelParams) => {
 
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Qualidade");
     const baseUrl = window.location.origin;
 
-    // --- 1. DEFINIÇÃO DINÂMICA DE HEADERS (Para calcular o maxCol) ---
+    // --- Definir colunas e setores dinâmicos para pragas ---
+    const colunasPragas = (activeTab === "pragas" && pragasColunasParam && pragasColunasParam.length > 0)
+        ? pragasColunasParam
+        : PRAGAS_COLUNAS;
+
+    const setoresPragas = (activeTab === "pragas" && pragasSetoresParam && pragasSetoresParam.length > 0)
+        ? pragasSetoresParam
+        : PRAGAS_SETORES;
+
+    // --- 1. DEFINIÇÃO DINÂMICA DE HEADERS (COM CONDICIONAL PARA PRAGAS) ---
     let headers: string[] = [];
+    let temAcaoCorretiva = false;
+
     if (activeTab === "vidros") {
         headers = ["Verificar (Item)", "Status", "Ação Recomendada", "Observação", "Tempo de Correção"];
     } else if (activeTab === "pragas") {
-        headers = ["Setor", ...PRAGAS_COLUNAS, "Ação Corretiva"];
+        // 🟢 CORREÇÃO AQUI: Validação segura que impede o undefined de ativar a coluna
+        temAcaoCorretiva = pragasLogs.some(log => {
+            const acao = log.grid?.['GERAL_AcaoCorretiva'];
+            return acao && acao.trim() !== '';
+        });
+
+        headers = ["Setor", ...colunasPragas];
+        if (temAcaoCorretiva) {
+            headers.push("Ação Corretiva");
+        }
     } else if (activeTab === "inusuais") {
-        headers = ["Data", "Descrição do Acontecimento", "Ação Corretiva", "Status", "Resp. Correção", "Resp. Packing"];
+        headers = ["Data", "Descrição do Acontecimento", "Ação Corretiva", "Resp. Correção", "Resp. Packing"];
     } else if (activeTab === "rejeitos") {
-        headers = ["Data de Retenção", "Quantidade/Kg", "Data de Saída", "Local de Destino", "Resp. Retenção", "Resp. Rejeitados"];
+        headers = ["Produto/Material", "Quantidade/Kg", "Local de Destino", "Data de Retenção", "Resp. Retenção", "Data de Saída", "Resp. Rejeitados"];
     }
 
-    const maxCol = headers.length || 5;
+    const maxCol = headers.length || 7;
 
     // --- 2. CONFIGURAÇÃO DE PÁGINA ---
     worksheet.pageSetup = {
@@ -120,7 +172,7 @@ export const exportControleQualidadeToExcel = async ({
         vidros: "MONITORAMENTO DE VIDRO E PLÁSTICO RÍGIDO",
         pragas: "MONITORAMENTO DE VETORES E PRAGAS URBANAS",
         inusuais: "REGISTRO DE ACONTECIMENTOS INUSUAIS",
-        rejeitos: "REGISTRO DE PRODUTOS RETIDOS / REJEITOS"
+        rejeitos: "REGISTRO DIÁRIO DE RETIDOS E REJEITOS"
     };
 
     const titleRow = worksheet.addRow([titulosMap[activeTab] || "CONTROLE DE QUALIDADE"]);
@@ -135,46 +187,99 @@ export const exportControleQualidadeToExcel = async ({
         worksheet.addRow([`Data da verificação: ${formatSafeDate(vidrosDate || new Date().toISOString().split("T")[0])}`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
     }
 
+    if (activeTab === "pragas") {
+        worksheet.addRow([`Data de Registro: ${new Date().toLocaleDateString("pt-BR")}`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
+    }
+
     worksheet.addRow([]);
 
-    // --- 5. ASSINATURAS (No Cabeçalho) ---
+    // --- 5. ASSINATURAS NO CABEÇALHO ---
     const processSignature = async (label: string, value: string | null | undefined) => {
         const row = worksheet.addRow([label, value ? formatName(value) : "_________________________________"]);
-        row.height = 60;
+        const rowHeight = 60;
+        row.height = rowHeight;
         row.getCell(1).font = { bold: true, size: 11, color: { argb: "FF1F2937" } };
-        row.getCell(2).alignment = { horizontal: "left", vertical: "bottom" };
+        row.getCell(2).alignment = { horizontal: "left", vertical: "bottom", wrapText: false };
+        worksheet.getColumn(2).width = 60;
 
         if (value) {
+            let imgData = null;
             if (value.startsWith("data:image")) {
-                const imgId = workbook.addImage({ base64: value.split(",")[1], extension: "png" });
-                worksheet.addImage(imgId, { tl: { col: 1.1, row: row.number - 1 }, ext: { width: 120, height: 35 }, editAs: "oneCell" });
+                imgData = { base64: value.split(",")[1], ext: "png" };
             } else {
-                const imgFile = await fetchSignatureImage(value);
-                if (imgFile) {
-                    const imgId = workbook.addImage({ buffer: imgFile.buffer, extension: imgFile.ext as any });
-                    worksheet.addImage(imgId, { tl: { col: 1.1, row: row.number - 1 }, ext: { width: 120, height: 35 }, editAs: "oneCell" });
-                }
+                const file = await fetchSignatureImage(value);
+                if (file) imgData = { buffer: file.buffer, ext: file.ext };
+            }
+            if (imgData) {
+                addTopSignature(worksheet, workbook, imgData, row.number, 2, 180, 50);
             }
         }
     };
 
+    let responsavel = responsavelParam;
+    let respPacking = respPackingParam;
+
+    if (activeTab === "pragas" && pragasLogs.length > 0) {
+        responsavel = pragasLogs[0].monitor || null;
+        respPacking = null;
+    }
+
     if (activeTab === "vidros") {
         await processSignature("Assinatura do Monitor:", vidrosMonitor);
         await processSignature("Assinatura do Resp. Packing:", vidrosResp);
-        worksheet.addRow([]);
+    } else {
+        if (responsavel) await processSignature("Assinatura do Responsável:", responsavel);
+        if (respPacking) await processSignature("Assinatura do Resp. Packing:", respPacking);
     }
+    worksheet.addRow([]);
 
     // --- 6. TABELA (ESTILOS E CABEÇALHOS) ---
     if (activeTab === "vidros") {
         worksheet.columns = [{ width: 30 }, { width: 12 }, { width: 35 }, { width: 35 }, { width: 20 }];
     } else if (activeTab === "pragas") {
         worksheet.getColumn(1).width = 25;
-        for (let i = 2; i <= PRAGAS_COLUNAS.length + 1; i++) worksheet.getColumn(i).width = 12;
-        worksheet.getColumn(PRAGAS_COLUNAS.length + 2).width = 30;
+
+        colunasPragas.forEach((coluna, index) => {
+            const colNumber = index + 2;
+            const colLower = coluna.toLowerCase();
+            let width = 14; // padrão
+
+            if (colLower.includes('armadilha') || colLower.includes('armadilhas')) {
+                width = 18;
+            } else if (colLower.includes('quantidade')) {
+                width = 22;
+            } else if (colLower.includes('encontrada')) {
+                width = 20;
+            } else if (colLower.includes('ação') || colLower.includes('corretiva')) {
+                width = 35;
+            } else if (colLower.length > 12) {
+                width = 18;
+            }
+            worksheet.getColumn(colNumber).width = width;
+        });
+
+        if (temAcaoCorretiva) {
+            const lastCol = colunasPragas.length + 2;
+            worksheet.getColumn(lastCol).width = 40;
+        }
     } else if (activeTab === "inusuais") {
-        worksheet.columns = [{ width: 15 }, { width: 40 }, { width: 35 }, { width: 15 }, { width: 20 }, { width: 20 }];
+        worksheet.columns = [
+            { width: 15 },
+            { width: 45 },
+            { width: 40 },
+            { width: 45 },
+            { width: 45 }
+        ];
     } else if (activeTab === "rejeitos") {
-        worksheet.columns = [{ width: 18 }, { width: 15 }, { width: 18 }, { width: 30 }, { width: 25 }, { width: 25 }];
+        worksheet.columns = [
+            { width: 30 },
+            { width: 15 },
+            { width: 25 },
+            { width: 18 },
+            { width: 45 },
+            { width: 18 },
+            { width: 45 }
+        ];
     }
 
     const headerRow = worksheet.addRow(headers);
@@ -188,22 +293,35 @@ export const exportControleQualidadeToExcel = async ({
 
     const addTableSignature = async (value: string | null | undefined, rowNum: number, colNum: number) => {
         if (!value) return;
-        const imgFile = value.startsWith("data:image") ? { base64: value.split(",")[1], ext: "png" } : await fetchSignatureImage(value);
-        if (imgFile) {
-            const imgId = workbook.addImage(value.startsWith("data:image") ? { base64: (imgFile as any).base64, extension: "png" } : { buffer: (imgFile as any).buffer, extension: (imgFile as any).ext });
-            worksheet.addImage(imgId, {
-                tl: { col: colNum - 1 + 0.1, row: rowNum - 1 + 0.1 },
-                ext: { width: 100, height: 35 },
-                editAs: "oneCell"
-            });
+        let imgData = null;
+        if (value.startsWith("data:image")) {
+            imgData = { base64: value.split(",")[1], ext: "png" };
+        } else {
+            const file = await fetchSignatureImage(value);
+            if (file) imgData = { buffer: file.buffer, ext: file.ext };
+        }
+        if (imgData) {
+            addTopSignature(worksheet, workbook, imgData, rowNum, colNum, 180, 50);
         }
     };
 
     const applyRowStyle = (row: ExcelJS.Row, isSignatureRow = false) => {
-        row.height = isSignatureRow ? 55 : 28;
-        row.eachCell((cell) => {
+        row.height = isSignatureRow ? 70 : 28;
+        row.eachCell((cell, colNumber) => {
             cell.border = { top: { style: "thin", color: { argb: "FFD1D5DB" } }, left: { style: "thin", color: { argb: "FFD1D5DB" } }, bottom: { style: "thin", color: { argb: "FFD1D5DB" } }, right: { style: "thin", color: { argb: "FFD1D5DB" } } };
-            cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+            let verticalAlign = "middle";
+            if (isSignatureRow) {
+                if (activeTab === "inusuais" && (colNumber === 4 || colNumber === 5)) {
+                    verticalAlign = "bottom";
+                } else if (activeTab === "rejeitos" && (colNumber === 5 || colNumber === 7)) {
+                    verticalAlign = "bottom";
+                }
+            }
+            cell.alignment = {
+                horizontal: "center",
+                vertical: verticalAlign as any,
+                wrapText: true
+            };
         });
     };
 
@@ -222,12 +340,15 @@ export const exportControleQualidadeToExcel = async ({
     } else if (activeTab === "pragas") {
         for (let i = 0; i < pragasLogs.length; i++) {
             const log = pragasLogs[i];
-            PRAGAS_SETORES.forEach((setor, index) => {
+            const acaoCorretiva = log.grid?.['GERAL_AcaoCorretiva'] || "";
+            setoresPragas.forEach((setor, index) => {
                 const rowData = [setor];
-                PRAGAS_COLUNAS.forEach(coluna => {
+                colunasPragas.forEach(coluna => {
                     rowData.push(log.grid[`${setor}_${coluna}`] || "");
                 });
-                rowData.push(index === 0 ? (log.acaoCorretiva || "") : "");
+                if (temAcaoCorretiva) {
+                    rowData.push(index === 0 ? acaoCorretiva : "");
+                }
                 const dataRow = worksheet.addRow(rowData);
                 applyRowStyle(dataRow);
             });
@@ -236,36 +357,81 @@ export const exportControleQualidadeToExcel = async ({
         for (let i = 0; i < inusuaisLogs.length; i++) {
             const row = inusuaisLogs[i];
             const dataRow = worksheet.addRow([
-                formatSafeDate(row.data), // 🟢 DATA SEGURA AQUI
-                row.descricao || "", row.acaoCorretiva || "",
-                row.status ? row.status.toUpperCase() : "",
-                formatName(row.respCorrecao), formatName(row.respPacking)
+                formatSafeDate(row.data),
+                row.descricao || "",
+                row.acaoCorretiva || "",
+                formatName(row.respCorrecao),
+                formatName(row.respPacking)
             ]);
 
             applyRowStyle(dataRow, true);
+            dataRow.getCell(4).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
             dataRow.getCell(5).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
-            dataRow.getCell(6).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
 
-            await addTableSignature(row.respCorrecao, dataRow.number, 5);
-            await addTableSignature(row.respPacking, dataRow.number, 6);
+            await addTableSignature(row.respCorrecao, dataRow.number, 4);
+            await addTableSignature(row.respPacking, dataRow.number, 5);
         }
     } else if (activeTab === "rejeitos") {
-        for (let i = 0; i < rejeitosLogs.length; i++) {
-            const row = rejeitosLogs[i];
+        for (const rejeito of rejeitosLogs) {
             const dataRow = worksheet.addRow([
-                formatSafeDate(row.dataRetencao), // 🟢 DATA SEGURA AQUI
-                row.quantidade || "",
-                formatSafeDate(row.dataSaida),    // 🟢 E AQUI
-                row.localDestino || "",
-                formatName(row.responsavelRetencao), formatName(row.responsavelRejeitados)
+                rejeito.produto || "",
+                rejeito.quantidade || "",
+                rejeito.localDestino || "",
+                formatSafeDate(rejeito.dataRetencao),
+                formatName(rejeito.responsavelRetencao),
+                formatSafeDate(rejeito.dataSaida),
+                formatName(rejeito.responsavelRejeitados)
             ]);
 
             applyRowStyle(dataRow, true);
             dataRow.getCell(5).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
-            dataRow.getCell(6).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
+            dataRow.getCell(7).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
 
-            await addTableSignature(row.responsavelRetencao, dataRow.number, 5);
-            await addTableSignature(row.responsavelRejeitados, dataRow.number, 6);
+            await addTableSignature(rejeito.responsavelRetencao, dataRow.number, 5);
+            await addTableSignature(rejeito.responsavelRejeitados, dataRow.number, 7);
+        }
+
+        const planosDeAcao = rejeitosLogs.filter(r =>
+            (r.naoConformidade && r.naoConformidade.trim() !== "") ||
+            (r.acaoCorretiva && r.acaoCorretiva.trim() !== "")
+        );
+
+        if (planosDeAcao.length > 0) {
+            worksheet.addRow([]);
+            const pacTitle = worksheet.addRow(["PLANO DE AÇÃO CORRETIVA (Não Conformidades)"]);
+            worksheet.mergeCells(pacTitle.number, 1, pacTitle.number, maxCol);
+            pacTitle.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF991B1B" } };
+            pacTitle.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+            pacTitle.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+            pacTitle.height = 30;
+
+            const pacHeaders = worksheet.addRow(["Produto", "Não Conformidade Identificada", "", "Ação Corretiva Proposta", "", "", ""]);
+            worksheet.mergeCells(pacHeaders.number, 2, pacHeaders.number, 3);
+            worksheet.mergeCells(pacHeaders.number, 4, pacHeaders.number, 7);
+
+            pacHeaders.eachCell((cell) => {
+                cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+                cell.font = { bold: true, color: { argb: "FF991B1B" } };
+                cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+                cell.alignment = { horizontal: "center", vertical: "middle" };
+            });
+
+            for (const action of planosDeAcao) {
+                const pacRow = worksheet.addRow([
+                    action.produto || "",
+                    action.naoConformidade || "", "",
+                    action.acaoCorretiva || "", "", "", ""
+                ]);
+
+                worksheet.mergeCells(pacRow.number, 2, pacRow.number, 3);
+                worksheet.mergeCells(pacRow.number, 4, pacRow.number, 7);
+
+                applyRowStyle(pacRow, false);
+                pacRow.height = 40;
+                pacRow.getCell(1).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+                pacRow.getCell(2).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+                pacRow.getCell(4).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+            }
         }
     }
 
@@ -278,7 +444,7 @@ export const exportControleQualidadeToExcel = async ({
 
     const legendaSelecionada = legendasMap[activeTab] || [];
 
-    if (activeTab === "inusuais") {
+    if ((activeTab as string) === "inusuais") {
         const inusuaisTitulo = legendaSelecionada[0] || "Exemplos de ocorrências para registro:";
         const inusuaisTitleRow = worksheet.addRow([inusuaisTitulo]);
         worksheet.mergeCells(inusuaisTitleRow.number, 1, inusuaisTitleRow.number, maxCol);
@@ -322,7 +488,6 @@ export const exportControleQualidadeToExcel = async ({
 
     const buffer = await workbook.xlsx.writeBuffer();
 
-    // 🟢 DEVOLVE COMO BLOB EM VEZ DE BAIXAR O ARQUIVO!
     return new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     });

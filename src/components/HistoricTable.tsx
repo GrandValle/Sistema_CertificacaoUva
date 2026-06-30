@@ -25,6 +25,8 @@ interface HistoricTableProps {
     searchPlaceholder?: string;
     monthFilter?: boolean;
     customFilter?: FilterOption;
+    // 🟢 NOVA PROP ADICIONADA:
+    onExportBatch?: () => void;
 }
 
 export function HistoricTable({
@@ -37,16 +39,14 @@ export function HistoricTable({
     searchPlaceholder = "Buscar...",
     monthFilter = true,
     customFilter,
+    onExportBatch, // 🟢 RECEBENDO A FUNÇÃO AQUI
 }: HistoricTableProps) {
     const [search, setSearch] = useState("");
-
-    // 🟢 VOLTAMOS A INICIAR COM O MÊS ATUAL PREENCHIDO
     const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
     const [selectedCustom, setSelectedCustom] = useState<string>("");
     const [isMounted, setIsMounted] = useState(false);
 
     useEffect(() => {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setIsMounted(true);
     }, []);
 
@@ -65,24 +65,20 @@ export function HistoricTable({
             val && typeof val !== "object" && String(val).toLowerCase().includes(search.toLowerCase())
         );
 
-        // 2. Filtro de Mês Inteligente (Resolve a Incompatibilidade)
+        // 2. Filtro de Mês Inteligente
         let monthMatch = false;
         if (!monthFilter || !selectedMonth) {
-            monthMatch = true; // Se não tem mês selecionado, mostra tudo
+            monthMatch = true;
         } else {
-            // selectedMonth chega como "2026-05"
             const [year, month] = selectedMonth.split("-");
-            const brDateStr = `${month}/${year}`; // Formato BR: "05/2026"
+            const brDateStr = `${month}/${year}`;
 
-            // Tenta achar "2026-05" direto no campo 'mes' (Padrão original)
             if (item.mes && String(item.mes).includes(selectedMonth)) {
                 monthMatch = true;
             }
-            // Tenta achar na Data de Exportação (Ex: "20/05/2026" ou "2026-05-20T...")
             else if (item.exportedAt && (String(item.exportedAt).includes(selectedMonth) || String(item.exportedAt).includes(brDateStr))) {
                 monthMatch = true;
             }
-            // Usa o ID (que é a data real em milissegundos) para extrair o mês matematicamente
             else if (item.id && !isNaN(Number(item.id))) {
                 const dateFromId = new Date(Number(item.id));
                 if (dateFromId.getFullYear() === Number(year) && (dateFromId.getMonth() + 1) === Number(month)) {
@@ -110,9 +106,9 @@ export function HistoricTable({
 
     return (
         <div className="space-y-6">
-            {/* Header */}
+            {/* Header com o NOVO BOTÃO */}
             <div className="bg-slate-900 rounded-2xl shadow-xl border border-slate-700 overflow-hidden">
-                <div className="p-5 md:p-6">
+                <div className="p-5 md:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="text-white">
                         <h1 className="text-xl md:text-2xl font-black mb-1 flex items-center gap-3 tracking-tight">
                             <div className="p-2 bg-slate-800 rounded-lg border border-slate-600 text-amber-400">
@@ -120,8 +116,19 @@ export function HistoricTable({
                             </div>
                             {title}
                         </h1>
-                        <p className="text-slate-400 text-xs md:text-sm font-bold tracking-widest uppercase ml-14">{description}</p>
+                        <p className="text-slate-400 text-xs md:text-sm font-bold tracking-widest uppercase sm:ml-14">{description}</p>
                     </div>
+
+                    {/* 🟢 BOTÃO DE EXPORTAR PERÍODO */}
+                    {onExportBatch && (
+                        <button
+                            onClick={onExportBatch}
+                            className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg transition-all active:scale-95 border border-indigo-500 w-full sm:w-auto"
+                        >
+                            <BiDownload size={20} />
+                            Exportar Período
+                        </button>
+                    )}
                 </div>
             </div>
 

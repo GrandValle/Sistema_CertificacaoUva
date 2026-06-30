@@ -214,7 +214,7 @@ export default function ManutencaoCalibracaoPage() {
           </div>
         )}
 
-        {/* ABA REPAROS - 🟢 BOTÃO NOVO REGISTRO MOVIDO PARA O TOPO */}
+        {/* ABA REPAROS - COM INPUT TEXT PARA RAZÃO DO SERVIÇO */}
         {activeTab === "reparos" && (
           <div className="animate-fade-in space-y-4">
             <div className="bg-slate-900 rounded-2xl px-5 py-4 flex flex-wrap justify-between items-center gap-4 shadow-md border border-slate-700">
@@ -272,15 +272,13 @@ export default function ManutencaoCalibracaoPage() {
                     </div>
                     <div>
                       <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1.5">Razão do serviço</label>
-                      <select
+                      <input
+                        type="text"
                         value={row.servico}
                         onChange={e => updateReparoRow(row.id, "servico", e.target.value)}
                         className="w-full border border-slate-200 bg-slate-50 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-900 outline-none focus:border-slate-400 focus:bg-white transition-colors"
-                      >
-                        <option value="Manutenção">Manutenção</option>
-                        <option value="Limpeza">Limpeza</option>
-                        <option value="Reparo">Reparo</option>
-                      </select>
+                        placeholder="Ex: Manutenção, Limpeza, Reparo..."
+                      />
                     </div>
                   </div>
 
@@ -342,7 +340,7 @@ export default function ManutencaoCalibracaoPage() {
                       </div>
                     </div>
                     <div className={`rounded-xl border-2 p-2 transition-colors ${row.supervisor ? "border-green-400 bg-slate-50" : "border-dashed border-slate-200 bg-slate-50"}`}>
-                      <p className="text-[10px] font-black text-slate-700 text-center">Supervisor da Área</p>
+                      <p className="text-[10px] font-black text-slate-700 text-center">Coordenador da Área</p>
                       <p className="text-[9px] text-slate-400 text-center mb-1">Responsável pela aprovação</p>
                       <div onPointerDownCapture={prepareSignatureInteraction}>
                         <SignatureSelector value={row.supervisor} onChange={v => updateReparoRow(row.id, "supervisor", v)} />
@@ -355,7 +353,7 @@ export default function ManutencaoCalibracaoPage() {
           </div>
         )}
 
-        {/* ABA BALANÇAS */}
+        {/* ABA BALANÇAS - FREQUÊNCIA FIXA "DIÁRIO" */}
         {activeTab === "balancas" && (
           <div className="animate-fade-in space-y-4">
             <div className="bg-slate-900 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-4 shadow-md border border-slate-700">
@@ -369,17 +367,11 @@ export default function ManutencaoCalibracaoPage() {
             </div>
 
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200 w-fit">
-                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 pr-1">Freq:</span>
-                {["Diário", "Quinzenal", "Mensal", "Anual"].map(freq => (
-                  <button
-                    key={freq}
-                    onClick={() => setFrequencia(freq as FrequenciaAfericao)}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase transition-all ${frequencia === freq ? "bg-amber-500 text-white shadow-sm" : "text-slate-500 hover:bg-slate-200"}`}
-                  >
-                    {freq}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Freq:</span>
+                <span className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-black uppercase border border-amber-200">
+                  Diário
+                </span>
               </div>
               <button onClick={addBalancaRow} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-black text-xs uppercase shadow active:scale-95 transition-all w-full sm:w-auto">
                 <BiPlus size={17} className="inline mr-1" /> Nova Linha
@@ -439,8 +431,6 @@ export default function ManutencaoCalibracaoPage() {
             type="button"
             onClick={async () => {
               await exportarExcel();
-
-              // 2. Limpa a chave correta do armazenamento local
               localStorage.removeItem("gv_manutencao_v6");
             }}
             className="flex items-center gap-2 bg-[#00c853] text-white px-6 md:px-7 py-2.5 md:py-3 rounded-xl font-black uppercase text-xs tracking-widest transition-all shadow-xl hover:brightness-110 active:scale-95"

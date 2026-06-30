@@ -91,22 +91,30 @@ export const WEEK_DAYS = [
     { short: "Sab", full: "Sábado" },
 ];
 
+export const PRODUTOS_LIMPEZA = [
+    "Primmax Sol Plus",
+    "Álcool em gel",
+    "Dermol plus",
+    "Sanclor",
+    "Primmax Sanclor"
+];
+
 // 🟢 LEGENDAS E OBSERVAÇÕES CENTRALIZADAS POR TELA
 export const LEGENDA_PRE_INSPECAO = [
-    "• SIM / C: Item operacional inspecionado e considerado CONFORME.",
-    "• NÃO / NC: Item operacional inspecionado considerado NÃO CONFORME.",
+    "• SIM: Item operacional inspecionado e considerado CONFORME.",
+    "• NÃO: Item operacional inspecionado considerado NÃO CONFORME.",
     "• OBSERVAÇÃO: Qualquer não conformidade exige a abertura e preenchimento do Plano de Ação Corretiva abaixo."
 ];
 
 export const LEGENDA_TRANSPORTE = [
-    "• SIM / C: Veículo de transporte inspecionado e considerado higienicamente apto para carregamento.",
-    "• NÃO / NC: Irregularidade encontrada na estrutura do baú, odor incompatível ou presença de vetores.",
+    "• SIM: Veículo de transporte inspecionado e considerado higienicamente apto para carregamento.",
+    "• NÃO: Irregularidade encontrada na estrutura do baú, odor incompatível ou presença de vetores.",
     "• OBSERVAÇÃO: Recomenda-se a limpeza e correção imediata do compartimento antes de iniciar o fluxo."
 ];
 
 export const LEGENDA_EMBALAGEM = [
-    "• SIM / C: Material íntegro, livre de sujidades e pragas, com integridade de lote e validade preservados.",
-    "• NÃO / NC: Presença de avarias físicas, violação de lote ou inconformidades visuais na embalagem.",
+    "• SIM: Material íntegro, livre de sujidades e pragas, com integridade de lote e validade preservados.",
+    "• NÃO: Presença de avarias físicas, violação de lote ou inconformidades visuais na embalagem.",
     "• OBSERVAÇÃO: Itens reprovados devem ser imediatamente segregados e devolvidos ao setor de suprimentos."
 ];
 
