@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum TipoEstoque {
+  QUIMICO
+  LIMPEZA
+}
+
+// --- TABELAS ---
+
+model Produto {
+  id           String      @id @default(uuid())
+  nome         String      @unique
+  tipo         TipoEstoque @default(LIMPEZA)
+  unidade      String
+  quantidade   String?
+  criadoEm     DateTime    @default(now())
+  atualizadoEm DateTime    @updatedAt
+
+  @@map("produtos")
+}
+
+model ControleAcesso {
+  id              String               @id @default(uuid())
+  mes             String
+  setor           String
+  registrosAcesso String               @db.LongText
+  criadoEm        DateTime             @default(now())
+  atualizadoEm    DateTime             @updatedAt
+  procedimentoId  String
+  documentos      DocumentoExportado[]
+
+  @@unique([setor, mes])
+  @@index([procedimentoId])
+  @@map("controle_acesso")
+}
+
+model ManutencaoCalibracao {
+  id              String               @id @default(uuid())
+  mes             String
+  tipo            String
+  frequencia      String
+  dadosManutencao Json                 @db.Json
+  criadoEm        DateTime             @default(now())
+  atualizadoEm    DateTime             @updatedAt
+  procedimentoId  String
+  documentos      DocumentoExportado[]
+
+  @@index([procedimentoId])
+  @@map("manutencao_calibracao")
+}
+
+model CondutaHigiene {
+  id             String               @id @default(uuid())
+  semana         String
+  aba            String
+  dadosConduta   Json                 @db.Json
+  criadoEm       DateTime             @default(now())
+  atualizadoEm   DateTime             @updatedAt
+  procedimentoId String
+  documentos     DocumentoExportado[]
+
+  @@index([procedimentoId])
+  @@map("conduta_higiene")
+}
+
+model ControleQualidade {
+  id             String               @id @default(uuid())
+  mes            String
+  aba            String
+  status         String
+  dadosQualidade Json                 @db.Json
+  criadoEm       DateTime             @default(now())
+  atualizadoEm   DateTime             @updatedAt
+  procedimentoId String
+  documentos     DocumentoExportado[]
+
+  @@index([procedimentoId])
+  @@map("controle_qualidade")
+}
+
+model EstoqueMaterial {
+  id             String               @id @default(uuid())
+  mes            String
+  aba            String
+  dadosEstoque   Json                 @db.Json
+  criadoEm       DateTime             @default(now())
+  atualizadoEm   DateTime             @updatedAt
+  procedimentoId String
+  documentos     DocumentoExportado[]
+
+  @@index([procedimentoId])
+  @@map("estoque_material")
+}
+
+model InspecaoOperacional {
+  id             String               @id @default(uuid())
+  mes            String
+  aba            String
+  dadosInspecao  Json                 @db.Json
+  criadoEm       DateTime             @default(now())
+  atualizadoEm   DateTime             @updatedAt
+  procedimentoId String
+  setor          String
+  documentos     DocumentoExportado[]
+
+  @@index([procedimentoId])
+  @@map("inspecao_operacional")
+}
+
+model HigienizacaoGeral {
+  id               String               @id @default(uuid())
+  setor            String
+  mes              String
+  ano              Int
+  registrosDiarios Json                 @db.Json
+  status           String
+  criadoEm         DateTime             @default(now())
+  atualizadoEm     DateTime             @updatedAt
+  procedimentoId   String
+  frequencia       String
+  documentos       DocumentoExportado[]
+
+  @@unique([setor, mes, ano, frequencia])
+  @@index([procedimentoId])
+  @@map("higienizacao_geral")
+}
+
+model QuestionarioVisitante {
+  id             String               @id @default(uuid())
+  data           String
+  nome           String
+  empresa        String
+  motivo         String
+  respostas      Json                 @db.Json
+  criadoEm       DateTime             @default(now())
+  procedimentoId String
+  documentos     DocumentoExportado[]
+
+  @@index([procedimentoId])
+  @@map("questionario_visitante")
+}
+
+model ProcedimentoOperacional {
+  id           String               @id @default(uuid())
+  codigo       String               @unique
+  titulo       String
+  revisadoPor  String
+  dataRevisao  DateTime
+  ativo        Boolean              @default(true)
+  criadoEm     DateTime             @default(now())
+  atualizadoEm DateTime             @updatedAt
+  documentos   DocumentoExportado[]
+
+  @@map("procedimento_operacional")
+}
+
+model ColaboradorOculos {
+  id           String           @id @default(uuid())
+  nome         String
+  tipo         String
+  status       String           @default("ATIVO")
+  criadoEm     DateTime         @default(now())
+  atualizadoEm DateTime         @updatedAt
+  registros    RegistroOculos[]
+
+  @@map("colaboradores_oculos")
+}
+
+model RegistroOculos {
+  id            String  @id @default(uuid())
+  data          String
+  intacto       String?
+  assinatura    String?
+  observacao    String?
+  status        String  @default("ATIVO")
+  colaboradorId String
+
+  // 🟢 AJUSTE AQUI: Nomeamos explicitamente a FK com o banco de dados
+  colaborador ColaboradorOculos @relation(fields: [colaboradorId], references: [id], map: "fk_registro_oculos_colaborador")
+
+  documentos   DocumentoExportado[]
+  criadoEm     DateTime             @default(now())
+  atualizadoEm DateTime             @updatedAt
+
+  @@index([colaboradorId])
+  @@map("registro_oculos")
+}
+
+model ColaboradorTesoura {
+  id            String               @id @default(uuid())
+  nome          String
+  numeroTesoura String
+  tipo          String
+  observacao    String?
+  criadoEm      DateTime             @default(now())
+  atualizadoEm  DateTime             @updatedAt
+  documentos    DocumentoExportado[]
+
+  @@map("colaboradores_tesoura")
+}
+
+model ColaboradorLavagem {
+  id           String   @id @default(uuid())
+  nome         String
+  tipo         String   @default("EFETIVO") // "EFETIVO" ou "CONTRATADO"
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@map("colaboradores_lavagem")
+}
+
+// --- TABELA DE DOCUMENTOS (Centralizada) ---
+
+model DocumentoExportado {
+  id          String   @id @default(uuid())
+  nomeArquivo String
+  tipoMime    String   @default("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+  conteudo    Bytes    @db.MediumBlob
+  criadoEm    DateTime @default(now())
+
+  // Relações (Foreign Keys)
+  controleAcessoId        String?
+  condutaHigieneId        String?
+  controleQualidadeId     String?
+  estoqueMaterialId       String?
+  inspecaoOperacionalId   String?
+  higienizacaoGeralId     String?
+  manutencaoCalibracaoId  String?
+  questionarioVisitanteId String?
+  procedimentoId          String?
+  registroOculosId        String?
+  colaboradorTesouraId    String?
+
+  // 🟢 AJUSTE AQUI: Definindo mapas de nomes exclusivos de restrição para o MySQL
+  controleAcesso        ControleAcesso?          @relation(fields: [controleAcessoId], references: [id], map: "fk_doc_controle_acesso")
+  condutaHigiene        CondutaHigiene?          @relation(fields: [condutaHigieneId], references: [id], map: "fk_doc_conduta_higiene")
+  controleQualidade     ControleQualidade?       @relation(fields: [controleQualidadeId], references: [id], map: "fk_doc_controle_qualidade")
+  estoqueMaterial       EstoqueMaterial?         @relation(fields: [estoqueMaterialId], references: [id], map: "fk_doc_estoque_material")
+  inspecaoOperacional   InspecaoOperacional?     @relation(fields: [inspecaoOperacionalId], references: [id], map: "fk_doc_inspecao_operacional")
+  higienizacaoGeral     HigienizacaoGeral?       @relation(fields: [higienizacaoGeralId], references: [id], map: "fk_doc_higienizacao_geral")
+  manutencaoCalibracao  ManutencaoCalibracao?    @relation(fields: [manutencaoCalibracaoId], references: [id], map: "fk_doc_manutencao_calibracao")
+  questionarioVisitante QuestionarioVisitante?   @relation(fields: [questionarioVisitanteId], references: [id], map: "fk_doc_questionario_visitante")
+  procedimento          ProcedimentoOperacional? @relation(fields: [procedimentoId], references: [id], map: "fk_doc_procedimento")
+  registroOculos        RegistroOculos?          @relation(fields: [registroOculosId], references: [id], map: "fk_doc_registro_oculos")
+  colaboradorTesoura    ColaboradorTesoura?      @relation(fields: [colaboradorTesouraId], references: [id], map: "fk_doc_colaborador_tesoura")
+
+  @@index([controleAcessoId])
+  @@index([condutaHigieneId])
+  @@index([controleQualidadeId])
+  @@index([estoqueMaterialId])
+  @@index([inspecaoOperacionalId])
+  @@index([higienizacaoGeralId])
+  @@index([manutencaoCalibracaoId])
+  @@index([questionarioVisitanteId])
+  @@index([procedimentoId])
+  @@index([registroOculosId])
+  @@index([colaboradorTesouraId])
+  @@map("documento_exportado")
+}

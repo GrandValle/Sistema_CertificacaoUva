@@ -1,0 +1,462 @@
+"use client";
+
+import React from "react";
+import Link from "next/link";
+import { BiHistory, BiSearch, BiPlus, BiCube, BiNote, BiInfoCircle, BiWater, BiCalendar, BiTime, BiDownload, BiTrash } from "react-icons/bi";
+import { SignatureSelector } from "../../../components/SignatureSelector";
+import { useHigienizacaoController } from "../controller/useHigienizacaoGeralController";
+import {
+    AREAS_DATA, CATEGORIES, FREQUENCIES, PRODUTO_LEGENDA, COMPLIANCE,
+    extractFrequencyType, AreaPreenchimento, CleaningLog,
+    DIAS_SEMANA_TESOURA
+} from "../model/higienizacaoGeral";
+
+export default function HigienizacaoGeralPage() {
+    const controller = useHigienizacaoController();
+    const {
+        currentTab, setCurrentTab,
+        selectedCategory, setSelectedCategory,
+        selectedFrequency, setSelectedFrequency,
+        searchTerm, setSearchTerm,
+        activeArea,
+        currentLogs: rawCurrentLogs,
+        filteredAreas,
+        addRow, updateField, toggleCheck, setCheckValue,
+        modoOperacao, setModoOperacao,
+        exportarExcel,
+        observacaoNC, setObservacaoNC,
+        // Tesouras
+        tesourasLogs: rawTesourasLogs,
+        addTesouraWeek,
+        updateTesouraWeek,
+        updateTesouraDia,
+        removeTesouraWeek
+    } = controller;
+
+    const tesourasLogs = rawTesourasLogs || [];
+    const currentLogs = rawCurrentLogs || [];
+
+    const setStatus = (idx: number, currentStatus: any, clickedStatus: string) => {
+        const nextStatus = currentStatus === clickedStatus ? '' : clickedStatus;
+        updateField(idx, 'status', nextStatus);
+    };
+
+    if (!activeArea) {
+        return <div className="p-8 text-center text-red-600">Área não encontrada. Selecione uma área válida na barra lateral.</div>;
+    }
+
+    return (
+        <div className="min-h-screen bg-gray-50 p-4 lg:p-8 font-sans text-sm text-gray-800 relative">
+            <div className="max-w-7xl mx-auto">
+                {/* HEADER (inalterado) */}
+                <header className="relative bg-white rounded-2xl shadow-2xl mb-8 overflow-hidden border border-gray-100">
+                    <div className="flex items-center justify-between p-4 md:p-6">
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 md:w-14 md:h-14 rounded-lg bg-green-600 flex items-center justify-center shadow">
+                                <span className="text-white font-bold text-lg">GV</span>
+                            </div>
+                            <div>
+                                <h1 className="text-lg md:text-xl font-bold text-gray-800">Controle de Higienização</h1>
+                                <p className="text-xs text-gray-500 flex items-center gap-1">
+                                    Sistema Integrado • <span className="font-xs text-gray-500">{AREAS_DATA.length} áreas de controle</span>
+                                </p>
+                            </div>
+                        </div>
+                        <div className="hidden md:flex items-center gap-4">
+                            <Link href="/historico?modulo=higienizacao" className="flex items-center gap-2 bg-gray-100 text-gray-800 hover:bg-gray-200 px-4 py-2.5 rounded-lg font-bold text-sm transition-colors border border-gray-200">
+                                <BiHistory size={18} /> Histórico
+                            </Link>
+                            <div className="bg-gray-50 rounded-lg px-4 py-2 border border-gray-200">
+                                <p className="text-xs text-gray-600">Revisado por:</p>
+                                <p className="font-semibold text-gray-800">{COMPLIANCE.revisedBy}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-blue-50 px-4 md:px-6 py-5 border-t border-gray-100 rounded-b-2xl shadow-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-700 mb-2">Filtrar por Categoria</label>
+                                <select value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} className="w-full bg-white border-2 border-blue-300 rounded-xl py-2.5 px-4 text-sm font-medium text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm transition-all cursor-pointer">
+                                    {CATEGORIES.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-700 mb-2">Filtrar por Frequência</label>
+                                <select value={selectedFrequency} onChange={(e) => setSelectedFrequency(e.target.value)} className="w-full bg-white border-2 border-blue-300 rounded-xl py-2.5 px-4 text-sm font-medium text-gray-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 shadow-sm transition-all cursor-pointer">
+                                    {FREQUENCIES.map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <div className="flex flex-col lg:flex-row gap-8">
+                    {/* SIDEBAR (contém legenda e produto) */}
+                    <aside className="w-full lg:w-64 shrink-0 flex flex-col gap-4">
+                        <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
+                            <div className="bg-gray-900 p-4 pb-3">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h2 className="text-white font-bold text-sm uppercase tracking-wider">Áreas de Controle</h2>
+                                        <p className="text-gray-300 text-xs mt-1">{filteredAreas.length} de {AREAS_DATA.length} áreas</p>
+                                    </div>
+                                    <div className="text-white text-xs bg-blue-600 px-1 py-1 rounded font-bold">Filtrado</div>
+                                </div>
+                            </div>
+                            <div className="p-2 bg-gray-50 border-b border-gray-100">
+                                <div className="relative">
+                                    <BiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                    <input type="text" placeholder="Buscar área..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full bg-white border border-gray-300 rounded-lg py-2 pl-9 pr-3 text-xs text-gray-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                                </div>
+                            </div>
+                            <div className="overflow-y-auto p-2 scrollbar-thin" style={{ maxHeight: 450 }}>
+                                {filteredAreas.map((a: AreaPreenchimento) => {
+                                    const freqType = extractFrequencyType(a.freq);
+                                    const categoryColor = CATEGORIES.find((c: any) => c.id === a.category)?.color || "bg-gray-100 text-gray-800";
+                                    const freqColorBase = FREQUENCIES.find((f: any) => f.id === freqType)?.color || "bg-gray-100 text-gray-800";
+                                    const isAtiva = currentTab === a.id;
+                                    const corNome = freqColorBase.split('-')[1];
+                                    const freqColor = isAtiva ? `bg-${corNome}-600 text-white shadow-sm ring-1 ring-white/30` : freqColorBase;
+                                    return (
+                                        <button key={a.id} onClick={() => setCurrentTab(a.id)} className={`w-full text-left p-3 rounded-lg mb-2 transition-all duration-200 ${isAtiva ? "bg-blue-600 text-white shadow border-blue-500" : "hover:bg-gray-50 border border-transparent hover:border-gray-200 text-gray-700"}`}>
+                                            <div className="flex justify-between items-start">
+                                                <span className="font-medium text-sm">{a.nome.toUpperCase()}</span>
+                                                {isAtiva && <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">Ativo</span>}
+                                            </div>
+                                            <div className="flex justify-between items-center mt-2">
+                                                <span className={`text-xs px-2 py-0.5 rounded-full ${isAtiva ? "bg-white/20 text-white" : categoryColor}`}>{a.category}</span>
+                                                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${freqColor}`}>{freqType.charAt(0)}</span>
+                                            </div>
+                                            <div className={`mt-2 text-[10px] italic flex items-center gap-1 ${isAtiva ? "text-blue-200" : "text-gray-500"}`}>{a.freq}</div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {/* LEGENDA E PRODUTO (aparecem para áreas matriciais e também para tesouras) */}
+                            {/* LEGENDA (APENAS para áreas matriciais, ex: Tesouras) */}
+                            {activeArea.isMatricial && activeArea.id !== 'transporte' && (
+                                <div className="bg-white rounded-2xl shadow-2xl p-5 border border-gray-100 mt-4">
+                                    <div className="flex items-center gap-2 mb-3 border-b border-gray-100 pb-2">
+                                        <BiInfoCircle className="text-blue-600" size={18} />
+                                        <h3 className="font-bold text-gray-800 text-sm">Legenda</h3>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-6 h-6 rounded bg-green-100 border border-green-200 flex items-center justify-center font-bold text-green-700 text-xs shadow-sm">C</div>
+                                            <p className="text-xs font-semibold text-gray-600">Conforme</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-6 h-6 rounded bg-red-100 border border-red-200 flex items-center justify-center font-bold text-red-700 text-xs shadow-sm">NC</div>
+                                            <p className="text-xs font-semibold text-gray-600">Não Conforme</p>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-6 h-6 rounded bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-gray-500 text-xs shadow-sm">Q.T</div>
+                                            <p className="text-xs font-semibold text-gray-600">Qtd. Tesouras</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* PRODUTOS / INSTRUÇÃO (aparece para TODAS as áreas) */}
+                            <div className="bg-white rounded-2xl shadow-2xl p-5 border border-gray-100 mt-4">
+                                <div className="pt-2">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <BiWater className="text-blue-400" size={16} />
+                                        <h3 className="font-bold text-gray-800 text-[11px] uppercase tracking-tight">
+                                            {activeArea.isMatricial ? "Produto Usado" : "Legenda de produtos:"}
+                                        </h3>
+                                    </div>
+                                    {activeArea.isMatricial && activeArea.instrucaoUso ? (
+                                        <p className="text-xs text-gray-500 leading-relaxed italic px-1">{activeArea.instrucaoUso}</p>
+                                    ) : (
+                                        activeArea.produtos && activeArea.produtos.length > 0 && (
+                                            <div className="space-y-2">
+                                                {activeArea.produtos.map((p: string) => (
+                                                    <div key={p} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0 shadow-sm">
+                                                                <span className="font-bold text-blue-700 text-xs">{p}</span>
+                                                            </div>
+                                                            <p className="text-[10px] font-bold text-gray-600 leading-tight">{PRODUTO_LEGENDA[p]}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+
+                    {/* MAIN CONTENT */}
+                    <main className="flex-1 min-w-0">
+                        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100 mb-6 transition-all duration-300">
+                            <div className="bg-gray-50 p-5 border-b border-gray-100">
+                                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                    <div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                                            <h1 className="text-xl font-bold text-gray-800 uppercase">
+                                                CONTROLE DE HIGIENIZAÇÃO - {activeArea.nome}
+                                            </h1>
+                                        </div>
+                                        <div className="flex items-center gap-4 mt-2">
+                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium border border-gray-200 uppercase">
+                                                {activeArea.freq}
+                                            </span>
+                                            <span className="text-xs text-gray-500">Código: {activeArea.doc}</span>
+                                        </div>
+                                    </div>
+                                    {activeArea.id === 'tesouras' ? (
+                                        <button onClick={addTesouraWeek} className="flex items-center justify-center gap-1.5 px-4 py-3 bg-linear-to-r from-green-500 to-emerald-600 text-white rounded-lg font-bold text-xs whitespace-nowrap hover:shadow-md transition-all active:scale-95 h-fit">
+                                            <BiPlus size={16} /> Nova Semana
+                                        </button>
+                                    ) : (
+                                        <button onClick={addRow} className="flex items-center justify-center gap-1.5 px-4 py-3 bg-linear-to-r from-green-500 to-emerald-600 text-white rounded-lg font-bold text-xs whitespace-nowrap hover:shadow-md transition-all active:scale-95 h-fit">
+                                            <BiPlus size={16} /> Nova Linha
+                                        </button>
+                                    )}
+                                </div>
+
+                                {activeArea.isMatricial && activeArea.id !== 'transporte' && activeArea.id !== 'tesouras' && (
+                                    <div className="flex items-center mt-4 pt-4 px-5 border-t border-gray-200">
+                                        <div className="inline-flex bg-gray-100 border border-gray-200 rounded-lg p-1">
+                                            <button onClick={() => setModoOperacao('packing')} className={`flex items-center gap-2 px-6 py-1.5 rounded-md text-xs font-bold transition-all ${modoOperacao === 'packing' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                                                <BiCube size={14} /> Packing
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* TABELA DE ACORDO COM A ÁREA */}
+                            <div className="overflow-x-auto rounded-b-lg bg-white">
+                                {activeArea.id === 'tesouras' ? (
+                                    <div className="p-4">
+                                        {/* TABELA SEMANAL */}
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-[800px] w-full border-collapse border border-gray-200 text-sm">
+                                                <thead>
+                                                    <tr className="bg-gray-100">
+                                                        <th className="border border-gray-200 px-3 py-2 text-left font-semibold">Período</th>
+                                                        {DIAS_SEMANA_TESOURA.map(dia => (
+                                                            <th key={dia.id} colSpan={2} className="border border-gray-200 px-3 py-2 text-center font-semibold">
+                                                                {dia.label}
+                                                            </th>
+                                                        ))}
+                                                        <th className="border border-gray-200 px-3 py-2 text-center font-semibold">Resp./Limpeza</th>
+                                                        <th className="border border-gray-200 px-3 py-2 text-center font-semibold">Monitora Resp.</th>
+                                                        <th className="border border-gray-200 px-3 py-2 w-8"></th>
+                                                    </tr>
+                                                    <tr className="bg-gray-50">
+                                                        <th className="border border-gray-200 px-3 py-2"></th>
+                                                        {DIAS_SEMANA_TESOURA.map(dia => (
+                                                            <React.Fragment key={dia.id}>
+                                                                <th className="border border-gray-200 px-2 py-2 text-center text-xs font-semibold">Q.T</th>
+                                                                <th className="border border-gray-200 px-2 py-2 text-center text-xs font-semibold">C/NC</th>
+                                                            </React.Fragment>
+                                                        ))}
+                                                        <th className="border border-gray-200 px-3 py-2"></th>
+                                                        <th className="border border-gray-200 px-3 py-2"></th>
+                                                        <th className="border border-gray-200 px-3 py-2"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {tesourasLogs.map((week) => (
+                                                        <tr key={week.id} className="hover:bg-gray-50">
+                                                            <td className="border border-gray-200 px-2 py-2 align-middle">
+                                                                <div className="flex flex-col gap-1">
+                                                                    <input
+                                                                        type="date"
+                                                                        value={week.dataInicio || ''}
+                                                                        onChange={(e) => updateTesouraWeek(week.id, 'dataInicio', e.target.value)}
+                                                                        className="w-28 border border-gray-300 rounded px-1 py-0.5 text-xs"
+                                                                        placeholder="Início"
+                                                                    />
+                                                                    <input
+                                                                        type="date"
+                                                                        value={week.dataFim || ''}
+                                                                        onChange={(e) => updateTesouraWeek(week.id, 'dataFim', e.target.value)}
+                                                                        className="w-28 border border-gray-300 rounded px-1 py-0.5 text-xs"
+                                                                        placeholder="Fim"
+                                                                    />
+                                                                </div>
+                                                            </td>
+                                                            {DIAS_SEMANA_TESOURA.map(dia => (
+                                                                <React.Fragment key={dia.id}>
+                                                                    <td className="border border-gray-200 px-1 py-1 text-center">
+                                                                        <input type="number" value={week.dias?.[dia.id]?.qtde ?? ''} onChange={(e) => updateTesouraDia(week.id, dia.id, 'qtde', e.target.value)} className="w-14 border border-gray-300 rounded text-center py-1 text-xs" placeholder="0" />
+                                                                    </td>
+                                                                    <td className="border border-gray-200 px-1 py-1 text-center">
+                                                                        <div className="flex gap-1 justify-center">
+                                                                            <button onClick={() => updateTesouraDia(week.id, dia.id, 'status', week.dias?.[dia.id]?.status === 'C' ? '' : 'C')} className={`w-7 h-7 rounded text-xs font-bold transition-colors ${week.dias?.[dia.id]?.status === 'C' ? 'bg-green-600 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>C</button>
+                                                                            <button onClick={() => updateTesouraDia(week.id, dia.id, 'status', week.dias?.[dia.id]?.status === 'NC' ? '' : 'NC')} className={`w-7 h-7 rounded text-xs font-bold transition-colors ${week.dias?.[dia.id]?.status === 'NC' ? 'bg-red-600 text-white' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'}`}>NC</button>
+                                                                        </div>
+                                                                    </td>
+                                                                </React.Fragment>
+                                                            ))}
+                                                            <td className="border border-gray-200 px-2 py-1">
+                                                                <SignatureSelector value={week.respLimpeza} onChange={(v) => updateTesouraWeek(week.id, 'respLimpeza', v)} />
+                                                            </td>
+                                                            <td className="border border-gray-200 px-2 py-1">
+                                                                <SignatureSelector value={week.monitorResponsavel} onChange={(v) => updateTesouraWeek(week.id, 'monitorResponsavel', v)} />
+                                                            </td>
+                                                            <td className="border border-gray-200 px-2 py-1 text-center">
+                                                                <button onClick={() => removeTesouraWeek(week.id)} className="text-red-500 hover:text-red-700" title="Remover semana"><BiTrash size={18} /></button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                    {tesourasLogs.length === 0 && (
+                                                        <tr><td colSpan={DIAS_SEMANA_TESOURA.length * 2 + 4} className="text-center py-8 text-gray-500">Nenhuma semana cadastrada. Clique em "Nova Semana" para começar.</td></tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* APENAS O CAMPO DE OBSERVAÇÕES DE NÃO CONFORMIDADE (mantido abaixo da tabela) */}
+                                        <div className="mt-6">
+                                            <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                                                <label className="flex items-center gap-2 text-xs font-bold text-gray-700 mb-2">
+                                                    <BiNote className="text-green-600" size={16} />
+                                                    Observações de Não Conformidade:
+                                                </label>
+                                                <textarea
+                                                    value={observacaoNC}
+                                                    onChange={(e) => setObservacaoNC(e.target.value)}
+                                                    className="w-full h-20 p-3 border border-gray-300 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-green-500 outline-none resize-none"
+                                                    placeholder="Descreva as observações caso exista alguma não conformidade..."
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : activeArea.id === 'transporte' ? (
+                                    // Tabela de Transporte (inalterada)
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Data</th>
+                                                {['Baú Limpo', 'Sem Odor', 'Livre Animais', 'Contentor Limpo'].map(h =>
+                                                    <th key={h} className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">{h}</th>
+                                                )}
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Monitora</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {currentLogs.map((reg: any, idx: number) => (
+                                                <tr key={`transporte-${reg.id}-${idx}`} className="hover:bg-gray-50 transition-colors">
+                                                    <td className="px-4 py-3 w-48 align-middle">
+                                                        <div className="relative flex items-center"><BiCalendar className="absolute left-3 text-gray-400 pointer-events-none" size={16} /><input type="date" value={reg.date} onChange={(e) => updateField(idx, 'date', e.target.value)} className="w-full bg-white border border-gray-300 rounded-lg py-2 pl-9 pr-3 text-sm focus:ring-blue-500" /></div>
+                                                    </td>
+                                                    {['bauLimpo', 'semOdor', 'livreAnimais', 'contentorLimpo'].map(field => (
+                                                        <td key={field} className="px-4 py-3 align-middle text-center">
+                                                            <div className="flex items-center justify-center gap-1">
+                                                                <button onClick={() => setCheckValue(idx, field, 'C')} className={`w-9 h-9 rounded-lg text-xs font-black transition-all border flex items-center justify-center ${reg.checks?.[field] === 'C' ? 'bg-green-50 text-green-600 border-green-300 shadow-sm scale-105' : 'bg-white text-gray-400 border-gray-200 hover:border-green-300 hover:text-green-500'}`}>C</button>
+                                                                <button onClick={() => setCheckValue(idx, field, 'NC')} className={`w-9 h-9 rounded-lg text-xs font-black transition-all border flex items-center justify-center ${reg.checks?.[field] === 'NC' ? 'bg-red-50 text-red-500 border-red-300 shadow-sm scale-105' : 'bg-white text-gray-400 border-gray-200 hover:border-red-300 hover:text-red-400'}`}>NC</button>
+                                                            </div>
+                                                        </td>
+                                                    ))}
+                                                    <td className="px-4 py-3 align-middle"><SignatureSelector value={reg.monitorSignature} onChange={(v: any) => updateField(idx, 'monitorSignature', v || "")} /></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                ) : (
+                                    // Tabela padrão (Panos, etc.)
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Data</th>
+                                                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">{activeArea.campo2}</th>
+                                                {activeArea.isMatricial ? (
+                                                    <>
+                                                        <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status (C/NC)</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Resp. / Limpeza</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Monitora Responsavel</th>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">{activeArea.tituloProdutos || "Produtos Utilizados"}</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assinatura</th>
+                                                    </>
+                                                )}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {currentLogs.map((reg: any, idx: number) => (
+                                                <tr key={`geral-${reg.id}-${idx}`} className="hover:bg-gray-50 transition-colors group">
+                                                    <td className="px-4 py-3 w-48 align-middle"><div className="relative flex items-center"><BiCalendar className="absolute left-3 text-gray-400 pointer-events-none" size={16} /><input type="date" value={reg.date} onChange={(e) => updateField(idx, 'date', e.target.value)} className="w-full bg-white border border-gray-300 rounded-lg py-2 pl-9 pr-3 text-sm focus:ring-blue-500" /></div></td>
+                                                    <td className="px-4 py-3 w-40 align-middle">
+                                                        {activeArea.campo2 === 'Horário' ? (
+                                                            <div className="relative flex items-center"><BiTime className="absolute left-3 text-gray-400 pointer-events-none" size={16} /><input type="time" value={reg.time} onChange={(e) => updateField(idx, 'time', e.target.value)} className="w-full bg-white border border-gray-300 rounded-lg py-2 pl-9 pr-3 text-sm focus:ring-blue-500" /></div>
+                                                        ) : (
+                                                            <input type="number" min="0" placeholder="Ex: 50" value={reg.time} onChange={(e) => updateField(idx, 'time', e.target.value)} className="w-24 text-center mx-auto block bg-white border border-gray-300 rounded-lg py-2 px-3 text-sm font-bold focus:ring-blue-500" />
+                                                        )}
+                                                    </td>
+                                                    {activeArea.isMatricial ? (
+                                                        <>
+                                                            <td className="px-4 py-3 align-middle text-center">
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    <button type="button" onClick={() => setStatus(idx, reg.status, 'C')} className={`w-10 h-10 rounded-lg text-sm font-black transition-all border flex items-center justify-center ${reg.status === 'C' ? 'bg-green-50 text-green-600 border-green-300 shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:border-green-300 hover:text-green-500'}`}>C</button>
+                                                                    <button type="button" onClick={() => setStatus(idx, reg.status, 'NC')} className={`w-10 h-10 rounded-lg text-sm font-black transition-all border flex items-center justify-center ${reg.status === 'NC' ? 'bg-red-50 text-red-500 border-red-300 shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:border-red-300 hover:text-red-400'}`}>NC</button>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-3 py-2 align-middle min-w-44"><SignatureSelector value={reg.signature} onChange={(v: any) => updateField(idx, 'signature', v || "")} /></td>
+                                                            <td className="px-3 py-2 align-middle min-w-44"><SignatureSelector value={reg.monitorSignature} onChange={(v: any) => updateField(idx, 'monitorSignature', v || "")} /></td>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <td className="px-4 py-3 align-middle">
+                                                                <div className="flex items-center gap-2">
+                                                                    {activeArea.produtos && activeArea.produtos.map((p: string) => (
+                                                                        <button key={p} type="button" onClick={() => toggleCheck(idx, p)} className={`flex flex-col items-center justify-center rounded-lg px-2 py-1 shadow-sm border-2 transition-all shrink-0 ${reg.checks?.[p] ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'}`} style={{ width: '80px', height: '52px' }}>
+                                                                            <span className="font-black text-sm leading-none mb-0.5">{p}</span>
+                                                                            <span className="text-[9px] font-medium text-center w-full leading-tight" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{PRODUTO_LEGENDA[p]}</span>
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-3 align-middle min-w-48"><SignatureSelector value={reg.signature} onChange={(v: any) => updateField(idx, 'signature', v || "")} /></td>
+                                                        </>
+                                                    )}
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                )}
+                            </div>
+
+                            {/* OBSERVAÇÕES PARA ÁREAS NORMAIS (quando aplicável) */}
+                            {activeArea.isMatricial && activeArea.id !== 'transporte' && activeArea.id !== 'tesouras' && (
+                                <div className="bg-gray-50 p-4 md:p-6 flex flex-col gap-4 border-t border-gray-100">
+                                    <div className="flex justify-between items-center text-xs text-gray-500">
+                                        <div>Total de registros na tela: <span className="font-bold text-gray-700">{currentLogs.length}</span></div>
+                                    </div>
+                                    <div className="w-full bg-white border border-gray-200 rounded-xl p-4 shadow-sm mt-2">
+                                        <label className="flex items-center gap-2 text-xs font-bold text-gray-700 mb-2"><BiNote className="text-green-600" size={16} /> Observações de Não Conformidade:</label>
+                                        <textarea value={observacaoNC} onChange={(e) => setObservacaoNC(e.target.value)} className="w-full h-20 p-3 border border-gray-300 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-green-500 outline-none resize-none" placeholder="Descreva as observações caso exista alguma não conformidade..." />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex justify-end mb-8">
+                            <button type="button" onClick={async () => { await exportarExcel(); localStorage.removeItem("gv_higienizacao_geral_v5"); }} className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 px-6 py-3 rounded-xl font-bold transition-all shadow-md active:scale-95 text-sm">
+                                <BiDownload size={22} /> Exportar para Excel
+                            </button>
+                        </div>
+                    </main>
+                </div>
+
+                <footer className="mt-6 bg-gray-900 text-white rounded-xl shadow overflow-hidden">
+                    <div className="p-4 md:p-5">
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center font-bold">GV</div><div><p className="text-sm font-medium">GrandValle - Sistema de Controle de Higienização</p><p className="text-xs text-gray-300">© {new Date().getFullYear()} - Todos os direitos reservados</p></div></div>
+                            <div className="flex items-center gap-6"><div className="text-center"><p className="text-xs text-gray-300">Revisado por</p><p className="font-bold text-yellow-300">{COMPLIANCE.revisedBy}</p></div><div className="h-8 w-px bg-gray-700"></div><div className="text-center"><p className="text-xs text-gray-300">Código PHU</p><p className="font-bold text-white bg-blue-600 px-3 py-1 rounded-lg">{activeArea.doc}</p></div></div>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </div>
+    );
+}

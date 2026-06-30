@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+/* ADICIONE ESSA LINHA PARA AS ANIMAÇÕES FUNCIONAREM */
+@plugin "tailwindcss-animate";
+
+:root {
+    --background: #ffffff;
+    --foreground: #171717;
+    /* Variável de cor temática para a Uva */
+    --color-uva-primary: #7c3aed;
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --font-sans: var(--font-geist-sans);
+    --font-mono: var(--font-geist-mono);
+
+    /* Adicionando o roxo ao tema do Tailwind */
+    --color-uva: var(--color-uva-primary);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --background: #0a0a0a;
+        --foreground: #ededed;
+    }
+}
+
+body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Customização dos inputs de data que você já usa */
+.date-input-placeholder::-webkit-datetime-edit {
+    color: transparent;
+}
+
+.date-input-placeholder:invalid::before {
+    content: "dd/mm/aaaa";
+    color: #9ca3af;
+    /* Um cinza claro para o placeholder não ficar invisível */
+    position: absolute;
+}
