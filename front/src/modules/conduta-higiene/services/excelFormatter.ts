@@ -78,8 +78,16 @@ interface ExportCondutaParams {
     checklist: ChecklistRow[];
     actions: ActionPlan[];
     lavagemLogs: LavagemLog[];
+    lavagemHorarios?: Record<string, { manha: string; tarde: string }>;
     colaboradores: any[]; // 🔥 Adicionado a lista completa para mapear os status na exportação
 }
+
+const formatShiftLabel = (hora?: string) => {
+    if (!hora) return "";
+    const [hh, mm] = hora.split(":");
+    if (!hh) return "";
+    return mm && mm !== "00" ? `${hh}:${mm}` : `${hh}h`;
+};
 
 export const exportCondutaToExcel = async ({
     activeTab,
@@ -88,6 +96,7 @@ export const exportCondutaToExcel = async ({
     checklist,
     actions,
     lavagemLogs,
+    lavagemHorarios,
     colaboradores // 🔥 Recebido aqui para fazermos os cruzamentos de cores
 }: ExportCondutaParams): Promise<Blob> => {
     const workbook = new ExcelJS.Workbook();
@@ -212,8 +221,9 @@ export const exportCondutaToExcel = async ({
         weekDays.forEach(day => {
             worksheet.mergeCells(rowDia.number, colIdx, rowDia.number, colIdx + 1);
             worksheet.getCell(rowDia.number, colIdx).value = day.label;
-            worksheet.getCell(rowHora.number, colIdx).value = "09h";
-            worksheet.getCell(rowHora.number, colIdx + 1).value = "14h";
+            const diaHorario = lavagemHorarios?.[day.short] || { manha: "09:00", tarde: "14:00" };
+            worksheet.getCell(rowHora.number, colIdx).value = formatShiftLabel(diaHorario.manha);
+            worksheet.getCell(rowHora.number, colIdx + 1).value = formatShiftLabel(diaHorario.tarde);
             colIdx += 2;
         });
 

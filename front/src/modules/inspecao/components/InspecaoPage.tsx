@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import {
   BiPlus, BiHistory, BiPackage,
   BiCheckCircle, BiXCircle, BiCalendarWeek,
-  BiBuilding, BiUser, BiError, BiWater, BiTrash
+  BiBuilding, BiUser, BiError, BiWater, BiTrash, BiTime
 } from "react-icons/bi";
 import { FaTractor } from "react-icons/fa";
 import { PRODUTOS_LIMPEZA } from "../model/inspecaoModel";
@@ -26,6 +26,11 @@ export default function InspecaoPage() {
     packagingLogs, addPackagingRow, updatePackaging, removePackagingRow,
     selectedCleaningProduct,
     cleaningLogs, addCleaningRow, updateCleaning, removeCleaningRow,
+    foreignObjectLogs,
+    FOREIGN_OBJECT_LOCATIONS,
+    addForeignObjectRow,
+    updateForeignObject,
+    removeForeignObjectRow,
     // 🟢 CORREÇÃO: Trocado os métodos antigos pela nossa nova função direta
     exportarExcel
   } = useInspecaoController();
@@ -44,10 +49,28 @@ export default function InspecaoPage() {
     if (activeTab === "pre_inspecao") return { code: "2.11.7", name: "Pré-Inspeção Operacional", title: "PRÉ-INSPEÇÃO OPERACIONAL" };
     if (activeTab === "transporte") return { code: "PHU-031", name: "Controle de higiene dos veículos e contentores", title: "INSPEÇÃO DE TRANSPORTE" };
     if (activeTab === "embalagem") return { code: "PHU-032", name: "Inspeção de Material de Embalagem", title: "INSPEÇÃO DE MATERIAL DE EMBALAGEM" };
+    if (activeTab === "objetos_estranhos") return { code: "PHU-033", name: "Controle de inspeção de objetos estranhos", title: "INSPEÇÃO DE OBJETOS ESTRANHOS" };
     return { code: "PHU-036", name: "Entrada de Material de Limpeza", title: "INSPEÇÃO DE MATERIAIS DE LIMPEZA" };
   };
 
   const docInfo = getDocInfo();
+  const [activeForeignSector, setActiveForeignSector] = useState<string>(FOREIGN_OBJECT_LOCATIONS[0]);
+
+  const filteredForeignObjectRows = foreignObjectLogs
+    .map((log, originalIdx) => ({ log, originalIdx }))
+    .filter(({ log }) => log.location === activeForeignSector);
+
+  useEffect(() => {
+    if (activeTab !== "objetos_estranhos") return;
+
+    const hasRowsForSector = foreignObjectLogs.some(
+      (row) => row.location === activeForeignSector
+    );
+
+    if (!hasRowsForSector) {
+      addForeignObjectRow(activeForeignSector);
+    }
+  }, [activeTab, activeForeignSector, foreignObjectLogs, addForeignObjectRow]);
 
   const getCategoryBadgeClass = (category: string) => {
     const normalized = category.trim().toLowerCase();
@@ -108,6 +131,7 @@ export default function InspecaoPage() {
             <button type="button" onClick={() => setActiveTab("pre_inspecao")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "pre_inspecao" ? "bg-orange-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}>📋 Pré-Inspeção & Ação</button>
             <button type="button" onClick={() => setActiveTab("transporte")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "transporte" ? "bg-blue-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}><FaTractor size={18} /> Transporte</button>
             <button type="button" onClick={() => setActiveTab("embalagem")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "embalagem" ? "bg-purple-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}><BiPackage size={18} /> Embalagem</button>
+            <button type="button" onClick={() => setActiveTab("objetos_estranhos")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "objetos_estranhos" ? "bg-amber-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}><BiError size={18} /> Obj. Estranhos</button>
             <button type="button" onClick={() => setActiveTab("limpeza")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "limpeza" ? "bg-cyan-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}><BiWater size={18} /> Mat. Limpeza</button>
           </div>
         </div>
@@ -174,6 +198,7 @@ export default function InspecaoPage() {
                           {d.short}
                         </th>
                       ))}
+
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -443,7 +468,7 @@ export default function InspecaoPage() {
                               className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between shadow-sm"
                             >
 
-                              <span className="text-sm font-semibold text-gray-700 leading-tight max-w-[140px]">
+                              <span className="text-sm font-semibold text-gray-700 leading-tight max-w-35">
                                 {item.label}
                               </span>
 
@@ -491,7 +516,7 @@ export default function InspecaoPage() {
                         </div>
                         <div>
                           <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Responsável (Assinatura)</label>
-                          <div className="border border-gray-300 rounded-lg bg-white min-h-[44px] flex items-center p-1">
+                          <div className="border border-gray-300 rounded-lg bg-white min-h-11 flex items-center p-1">
                             <SignatureSelector
                               value={p.responsavel}
                               onChange={(v) => updatePackaging(idx, 'responsavel', v)}
@@ -512,6 +537,131 @@ export default function InspecaoPage() {
                   <p className="text-sm">Clique em "Novo Registro" para começar.</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ================= ABA 5: OBJETOS ESTRANHOS ================= */}
+          {activeTab === "objetos_estranhos" && (
+            <div className="space-y-4 animate-fade-in">
+              <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-100 text-amber-700 rounded-lg"><BiError size={22} /></div>
+                  <div>
+                    <h2 className="font-bold text-gray-800 text-lg">Controle de Inspeção de Objetos Estranhos</h2>
+                    <p className="text-xs text-gray-500 font-medium tracking-wide">Documento PHU-033</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => addForeignObjectRow(activeForeignSector)} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-amber-600 text-white rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all"><BiPlus size={18} /> Novo Registro</button>
+              </div>
+
+              <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                <p className="text-[11px] font-black uppercase tracking-wider text-gray-500 mb-3">Setor de Registro</p>
+                <div className="flex flex-wrap gap-2">
+                  {FOREIGN_OBJECT_LOCATIONS.map((sector) => (
+                    <button
+                      key={sector}
+                      type="button"
+                      onClick={() => setActiveForeignSector(sector)}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all border ${activeForeignSector === sector
+                        ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                        : "bg-white text-gray-600 border-gray-300 hover:border-amber-300 hover:text-amber-700"
+                        }`}
+                    >
+                      {sector}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+                <table className="min-w-250 w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr className="text-[11px] uppercase tracking-tighter text-gray-500 font-black">
+                      <th className="p-4 text-left">Data</th>
+                      <th className="p-4 text-left">Horário</th>
+                      <th className="p-4 text-center">C</th>
+                      <th className="p-4 text-center">NC</th>
+                      <th className="p-4 text-left">Objeto Encontrado</th>
+                      <th className="p-4 text-left">Ação Corretiva</th>
+                      <th className="p-4 text-left">Responsável</th>
+                      <th className="p-4"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredForeignObjectRows.map(({ log, originalIdx }) => (
+                      <tr key={log.id} className="hover:bg-amber-50/30 transition-colors group">
+                        <td className="p-2 w-40">
+                          <input type="date" value={log.date} onChange={(e) => updateForeignObject(originalIdx, 'date', e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-amber-400 shadow-sm" />
+                        </td>
+                        <td className="p-2 w-36">
+                          <div className="relative">
+                            <BiTime className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+                            <input type="time" value={log.time} onChange={(e) => updateForeignObject(originalIdx, 'time', e.target.value)} className="w-full border border-gray-300 rounded-lg pl-7 pr-2 py-1.5 text-xs outline-none focus:border-amber-400 shadow-sm" />
+                          </div>
+                        </td>
+                        <td className="p-2 text-center w-20">
+                          <button
+                            type="button"
+                            onClick={() => updateForeignObject(originalIdx, 'status', log.status === 'C' ? null : 'C')}
+                            className={`w-10 h-9 rounded-lg font-black text-xs transition-all ${log.status === 'C' ? 'bg-green-500 text-white shadow-md' : 'bg-gray-100 border border-gray-200 text-gray-400 hover:bg-green-50'}`}
+                          >
+                            C
+                          </button>
+                        </td>
+                        <td className="p-2 text-center w-20">
+                          <button
+                            type="button"
+                            onClick={() => updateForeignObject(originalIdx, 'status', log.status === 'NC' ? null : 'NC')}
+                            className={`w-10 h-9 rounded-lg font-black text-xs transition-all ${log.status === 'NC' ? 'bg-red-500 text-white shadow-md' : 'bg-gray-100 border border-gray-200 text-gray-400 hover:bg-red-50'}`}
+                          >
+                            NC
+                          </button>
+                        </td>
+                        <td className="p-2 min-w-55">
+                          <input type="text" value={log.foundObject} onChange={(e) => updateForeignObject(originalIdx, 'foundObject', e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-amber-400 shadow-sm" placeholder="Ex: lâmina, pedra, vidro..." />
+                        </td>
+                        <td className="p-2 min-w-55">
+                          <input type="text" value={log.correctiveAction} onChange={(e) => updateForeignObject(originalIdx, 'correctiveAction', e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs outline-none focus:border-amber-400 shadow-sm" placeholder="Descreva a ação corretiva" />
+                        </td>
+                        <td className="p-2 min-w-57.5">
+                          <SignatureSelector value={log.responsible} onChange={(v) => updateForeignObject(originalIdx, 'responsible', v)} />
+                        </td>
+                        <td className="p-2 text-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (filteredForeignObjectRows.length > 1) {
+                                removeForeignObjectRow(log.id);
+                              }
+                            }}
+                            disabled={filteredForeignObjectRows.length <= 1}
+                            className={`transition-colors p-1.5 ${filteredForeignObjectRows.length <= 1
+                              ? "text-gray-200 cursor-not-allowed"
+                              : "text-gray-300 hover:text-red-500"
+                              }`}
+                          >
+                            <BiTrash size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredForeignObjectRows.length === 0 && (
+                      <tr>
+                        <td colSpan={8} className="p-6 text-center text-gray-400 font-medium">
+                          Nenhum registro para {activeForeignSector}. Clique em "Novo Registro" para começar.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 shadow-sm">
+                <p className="text-xs font-black uppercase tracking-wide text-amber-800 mb-1.5">Observação</p>
+                <p className="text-sm text-amber-900 leading-relaxed">
+                  Caso seja encontrado algum objeto considerado estranho no processo, comunicar ao responsável pela segurança do alimento e registrar na planilha de controle de objetos estranhos. Exemplo: grampo, lâminas, ferramenta, peças de equipamentos, pedra, vidro, metal, plástico, madeira, adornos, caneta e insetos.
+                </p>
+              </div>
             </div>
           )}
 
@@ -546,7 +696,7 @@ export default function InspecaoPage() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="min-w-[1000px] w-full text-sm border-collapse">
+                  <table className="min-w-250 w-full text-sm border-collapse">
                     <thead className="bg-gray-50 border-b border-gray-200">
                       <tr className="text-[10px] lg:text-[11px] uppercase tracking-widest text-gray-600 font-black leading-tight">
                         <th className="p-3 text-left w-32">Data</th>
@@ -639,7 +789,7 @@ export default function InspecaoPage() {
             type="button"
             onClick={async () => {
               // 🟢 Chamando a função direta (sem controller.) desestruturada do hook
-              await exportarExcel();
+              await exportarExcel(activeTab === "objetos_estranhos" ? activeForeignSector : undefined);
 
               // Limpa a chave do LocalStorage direto no clique
               localStorage.removeItem("gv_inspecao_v11");

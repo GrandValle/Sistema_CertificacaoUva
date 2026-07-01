@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PRE_OP_ITEMS_DATA, WEEK_DAYS, PreOpItem, ActionPlan, PRODUTOS_LIMPEZA } from "../model/inspecaoModel"; // <-- importa PRODUTOS_LIMPEZA
+import { PRE_OP_ITEMS_DATA, WEEK_DAYS, PreOpItem, ActionPlan, PRODUTOS_LIMPEZA, FOREIGN_OBJECT_LOCATIONS, ForeignObjectLog } from "../model/inspecaoModel"; // <-- importa PRODUTOS_LIMPEZA
 import { exportInspecaoToExcel } from "../services/excelFormatter";
 import { STORAGE_KEYS } from "../../../constants/storageKeys";
 import { salvarDocumento } from "../../../services/api";
 
-export type TabType = "pre_inspecao" | "transporte" | "embalagem" | "limpeza";
+export type TabType = "pre_inspecao" | "transporte" | "embalagem" | "limpeza" | "objetos_estranhos";
 
 export interface TransportLog {
     id: number; date: string; bauLimpo: "C" | "NC" | null; semOdor: "C" | "NC" | null;
@@ -33,6 +33,7 @@ interface InspecaoPersistedState {
     transportLogs?: TransportLog[];
     packagingLogs?: PackagingLog[];
     cleaningLogs?: CleaningLog[];
+    foreignObjectLogs?: ForeignObjectLog[];
 }
 
 // REMOVA a linha: export const CLEANING_PRODUCTS = ["Primmax Sanclor"];
@@ -76,6 +77,19 @@ export function useInspecaoController() {
         { id: 7, date: "", product: PRODUTOS_LIMPEZA[0], produtoCorreto: null, composicaoOk: null, embalagemOk: null, padraoExigido: null, cumprePedido: null, responsavel: null }
     ]);
 
+    const [foreignObjectLogs, setForeignObjectLogs] = useState<ForeignObjectLog[]>([
+        {
+            id: 8,
+            date: "",
+            time: "",
+            location: FOREIGN_OBJECT_LOCATIONS[0],
+            status: null,
+            foundObject: "",
+            correctiveAction: "",
+            responsible: null
+        }
+    ]);
+
     // 2. LÊ O LOCALSTORAGE APENAS NO CLIENTE APÓS A MONTAGEM
     useEffect(() => {
         const savedState = getSavedState();
@@ -86,6 +100,7 @@ export function useInspecaoController() {
             if (savedState.transportLogs?.length) setTransportLogs(savedState.transportLogs);
             if (savedState.packagingLogs?.length) setPackagingLogs(savedState.packagingLogs);
             if (savedState.cleaningLogs?.length) setCleaningLogs(savedState.cleaningLogs);
+            if (savedState.foreignObjectLogs?.length) setForeignObjectLogs(savedState.foreignObjectLogs);
         }
         setIsInitialized(true); // Marca que já carregou
     }, []);
@@ -95,9 +110,9 @@ export function useInspecaoController() {
         if (!isInitialized) return; // <-- Evita que os valores em branco apaguem o localStorage!
 
         localStorage.setItem(STORAGE_KEYS.inspecao, JSON.stringify({
-            preOpInfo, preOpData, actionPlans, transportLogs, packagingLogs, cleaningLogs
+            preOpInfo, preOpData, actionPlans, transportLogs, packagingLogs, cleaningLogs, foreignObjectLogs
         }));
-    }, [preOpInfo, preOpData, actionPlans, transportLogs, packagingLogs, cleaningLogs, isInitialized]);
+    }, [preOpInfo, preOpData, actionPlans, transportLogs, packagingLogs, cleaningLogs, foreignObjectLogs, isInitialized]);
 
     const togglePreOp = (idx: number, day: string) => { const newData = [...preOpData]; const current = newData[idx].checks[day]; newData[idx].checks[day] = current === null ? "C" : current === "C" ? "NC" : null; setPreOpData(newData); };
     const addActionRow = () => setActionPlans([...actionPlans, { id: Date.now(), date: "", item: "", naoConformidade: "", causaRaiz: "", acaoCorretiva: "", responsavel: null }]);
@@ -129,10 +144,35 @@ export function useInspecaoController() {
     };
     const removeCleaningRow = (id: number) => setCleaningLogs(cleaningLogs.filter(p => p.id !== id));
 
-    const exportarExcel = async () => {
+    const addForeignObjectRow = (location?: string) => setForeignObjectLogs([
+        ...foreignObjectLogs,
+        {
+            id: Date.now(),
+            date: "",
+            time: "",
+            location: location ?? FOREIGN_OBJECT_LOCATIONS[0],
+            status: null,
+            foundObject: "",
+            correctiveAction: "",
+            responsible: null
+        }
+    ]);
+
+    const updateForeignObject = <K extends keyof ForeignObjectLog>(idx: number, field: K, value: ForeignObjectLog[K]) => {
+        setForeignObjectLogs((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
+    };
+
+    const removeForeignObjectRow = (id: number) => setForeignObjectLogs(foreignObjectLogs.filter(r => r.id !== id));
+
+    const exportarExcel = async (selectedForeignSector?: string) => {
         try {
             console.log("Gerando arquivo Excel da Inspeção...");
             const now = new Date();
+
+            const foreignRowsToExport =
+                activeTab === "objetos_estranhos" && selectedForeignSector
+                    ? foreignObjectLogs.filter((row) => row.location === selectedForeignSector)
+                    : foreignObjectLogs;
 
             const excelBlob = await exportInspecaoToExcel({
                 activeTabParam: activeTab,
@@ -142,7 +182,8 @@ export function useInspecaoController() {
                 transportLogs,
                 packagingLogs,
                 currentCleaningLogs: cleaningLogs,
-                selectedCleaningProduct
+                selectedCleaningProduct,
+                objetosEstranhosLogs: foreignRowsToExport
             });
 
             const mesAtual = now.toISOString().slice(0, 7);
@@ -150,14 +191,16 @@ export function useInspecaoController() {
                 pre_inspecao: "Pré-Inspeção",
                 transporte: "Transporte",
                 embalagem: "Embalagem",
-                limpeza: "Limpeza"
+                limpeza: "Limpeza",
+                objetos_estranhos: "Objetos Estranhos"
             };
 
             const docCodeMap: Record<TabType, string> = {
                 pre_inspecao: "2.11.7",
                 transporte: "PHU-031",
                 embalagem: "PHU-032",
-                limpeza: "PHU-036"
+                limpeza: "PHU-036",
+                objetos_estranhos: "PHU-033"
             };
 
             let dadosInspecao = {};
@@ -165,13 +208,16 @@ export function useInspecaoController() {
             if (activeTab === "transporte") dadosInspecao = { transportLogs };
             if (activeTab === "embalagem") dadosInspecao = { packagingLogs };
             if (activeTab === "limpeza") dadosInspecao = { cleaningLogs, selectedCleaningProduct };
+            if (activeTab === "objetos_estranhos") dadosInspecao = { foreignObjectLogs: foreignRowsToExport };
 
             const dadosDoBanco = {
                 popCode: docCodeMap[activeTab],
                 titulo: `Inspeção - ${tabNameMap[activeTab]}`,
                 mes: mesAtual,
                 aba: tabNameMap[activeTab],
-                setor: tabNameMap[activeTab],
+                setor: activeTab === "objetos_estranhos" && selectedForeignSector
+                    ? selectedForeignSector
+                    : tabNameMap[activeTab],
                 dadosInspecao: dadosInspecao
             };
 
@@ -217,6 +263,20 @@ export function useInspecaoController() {
                         responsavel: null
                     }]);
                     break;
+                case "objetos_estranhos":
+                    setForeignObjectLogs([
+                        {
+                            id: Date.now(),
+                            date: "",
+                            time: "",
+                            location: FOREIGN_OBJECT_LOCATIONS[0],
+                            status: null,
+                            foundObject: "",
+                            correctiveAction: "",
+                            responsible: null
+                        }
+                    ]);
+                    break;
             }
 
             window.dispatchEvent(new Event("storage"));
@@ -241,6 +301,11 @@ export function useInspecaoController() {
         selectedCleaningProduct,
         setSelectedCleaningProduct,
         cleaningLogs, addCleaningRow, updateCleaning, removeCleaningRow,
+        foreignObjectLogs,
+        FOREIGN_OBJECT_LOCATIONS,
+        addForeignObjectRow,
+        updateForeignObject,
+        removeForeignObjectRow,
         exportarExcel
     };
 }

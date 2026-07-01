@@ -1,9 +1,11 @@
-export type CQTabType = "vidros" | "pragas" | "inusuais" | "rejeitos";
+// src/modules/controle-qualidade/model/controleQualidadeModel.ts
+
+export type CQTabType = "vidros" | "pragas" | "inusuais" | "rejeitos" | "residuos";
 
 export interface VidrosLog {
     id: number;
     item: string;
-    conforme: "C" | "NC" | null; // <-- MUDOU AQUI
+    conforme: "C" | "NC" | null;
     acaoRecomendada: string;
     tempoCorrecao: string;
 }
@@ -41,6 +43,16 @@ export interface RegistroRejeito {
     responsavelRejeitados: string | null;
 }
 
+// 🔥 NOVA INTERFACE PARA RESÍDUOS
+export interface ResiduosLog {
+    id: number;
+    dataPeriodo: string;
+    terca: string;        // "SIM" ou ""
+    sexta: string;        // "SIM" ou ""
+    responsavelRecolhimento: string | null;
+    monitorResponsavel: string | null;
+}
+
 export const VIDROS_ITEMS = [
     "Vidros Trincados", "Vidros Quebrados", "Vidros Ausentes", "Vidros Sujos",
     "Lâmpadas c/Proteção", "Presença de plástico rígido", "Outros"
@@ -56,6 +68,14 @@ export const PRAGAS_COLUNAS = [
     "Baratas", "Camundongos", "Moscas", "Formigas", "Aranhas", "Traças",
     "Mariposas", "Besouros", "Roedores", "Pássaros", "Morcegos",
     "Lagartixas", "Sapos/Rãs", "Cobra", "Outros", "Nº Armadilha"
+];
+
+// 🔥 OPÇÕES DE LIXO PARA O COMPONENTE DE RESÍDUOS
+export const TIPOS_LIXO = [
+    "Papel/Papelão",
+    "Plástico",
+    "Orgânico",
+    "Metal"
 ];
 
 export const LEGENDA_INUSUAIS = [
@@ -82,6 +102,12 @@ export const LEGENDA_REJEITOS = [
 export const LEGENDA_VIDROS = [
     "SIM: Item em conformidade (Sem trincas, limpo e íntegro).",
     "NÃO: Item não conforme (Avariado ou sujo - requer ação imediata)."
+];
+
+// 🔥 LEGENDA PARA RESÍDUOS
+export const LEGENDA_RESIDUOS = [
+    "• SIM: Recolhimento de resíduos realizado com sucesso no dia indicado.",
+    "• NÃO: Recolhimento de resíduos não realizado no dia indicado.",
 ];
 
 export const COMPLIANCE_REJEITOS = {

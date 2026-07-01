@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import {
-    CQTabType, VidrosLog, PragaGridCell, PragasLog, InusuaisLog,
+    CQTabType, VidrosLog, PragaGridCell, PragasLog, InusuaisLog, ResiduosLog,
     VIDROS_ITEMS, PRAGAS_SETORES, PRAGAS_COLUNAS
 } from "../model/controleQualidadeModel";
 import { STORAGE_KEYS } from "../../../constants/storageKeys";
@@ -22,6 +22,7 @@ export function useControleQualidadeController() {
         pragasLogs?: PragasLog[];
         inusuaisLogs?: InusuaisLog[];
         rejeitosLogs?: any[];
+        residuosLogs?: ResiduosLog[];
         colunasPragas?: string[];
         setoresPragas?: string[];
     }
@@ -59,7 +60,10 @@ export function useControleQualidadeController() {
     );
     const [rejeitosLogs, setRejeitosLogs] = useState<any[]>(() => savedState?.rejeitosLogs || []);
 
-    // 🔥 NOVOS ESTADOS: listas dinâmicas
+    // 🔥 NOVO ESTADO: Resíduos
+    const [residuosLogs, setResiduosLogs] = useState<ResiduosLog[]>(() => savedState?.residuosLogs || []);
+
+    // --- Listas dinâmicas ---
     const [colunasPragas, setColunasPragas] = useState<string[]>(() => {
         if (savedState?.colunasPragas && savedState.colunasPragas.length > 0) {
             return savedState.colunasPragas;
@@ -81,10 +85,10 @@ export function useControleQualidadeController() {
     useEffect(() => {
         localStorage.setItem(STORAGE_KEYS.controleQualidade, JSON.stringify({
             vidrosLogs, vidrosDate, vidrosMonitor, vidrosResp, vidrosObs,
-            pragasLogs, inusuaisLogs, rejeitosLogs,
+            pragasLogs, inusuaisLogs, rejeitosLogs, residuosLogs,
             colunasPragas, setoresPragas
         }));
-    }, [vidrosLogs, vidrosDate, vidrosMonitor, vidrosResp, vidrosObs, pragasLogs, inusuaisLogs, rejeitosLogs, colunasPragas, setoresPragas]);
+    }, [vidrosLogs, vidrosDate, vidrosMonitor, vidrosResp, vidrosObs, pragasLogs, inusuaisLogs, rejeitosLogs, residuosLogs, colunasPragas, setoresPragas]);
 
     // --- Funções Vidros ---
     const updateVidro = <K extends keyof VidrosLog>(id: number, field: K, value: VidrosLog[K]) => {
@@ -117,7 +121,7 @@ export function useControleQualidadeController() {
     const updatePragaGrid = (logId: number, setor: string, coluna: string, value: string) => setPragasLogs(pragasLogs.map(log => log.id === logId ? { ...log, grid: { ...log.grid, [`${setor}_${coluna}`]: value } } : log));
     const removePragaLog = (id: number) => setPragasLogs(pragasLogs.filter(p => p.id !== id));
 
-    // 🔥 Funções para manipular listas dinâmicas
+    // --- Funções Listas Dinâmicas (Pragas) ---
     const adicionarPraga = (praga: string) => {
         const pragaUpper = praga.toUpperCase().trim();
         if (pragaUpper && !colunasPragas.some((c: string) => c.toUpperCase() === pragaUpper)) {
@@ -129,7 +133,6 @@ export function useControleQualidadeController() {
             else novasColunas.push(pragaUpper);
             setColunasPragas(novasColunas);
 
-            // Atualiza grids existentes
             setPragasLogs(prev => prev.map(log => {
                 const newGrid = { ...log.grid };
                 setoresPragas.forEach(setor => {
@@ -200,22 +203,55 @@ export function useControleQualidadeController() {
             naoConformidade: "", acaoCorretiva: ""
         }]);
     };
-    const updateRejeitoRow = (id: number, field: string, value: any) => {
-        setRejeitosLogs(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    const updateRejeitoRow = (id: number, field: string, value: any) => setRejeitosLogs(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
+    const removeRejeitoRow = (id: number) => setRejeitosLogs(prev => prev.filter(item => item.id !== id));
+
+    // 🔥 FUNÇÃO AUXILIAR: Gera o período da semana atual (segunda a sábado)
+    const getCurrentWeekPeriod = (): string => {
+        const hoje = new Date();
+        const diaSemana = hoje.getDay();
+        const diffParaSegunda = diaSemana === 0 ? -6 : 1 - diaSemana;
+
+        const segunda = new Date(hoje);
+        segunda.setDate(hoje.getDate() + diffParaSegunda);
+
+        const sabado = new Date(segunda);
+        sabado.setDate(segunda.getDate() + 5);
+
+        const pad = (n: number) => String(n).padStart(2, '0');
+
+        // Retorna no formato limpo: DD/MM a DD/MM/YYYY (Ex: 29/06 a 04/07/2026)
+        return `${pad(segunda.getDate())}/${pad(segunda.getMonth() + 1)} a ${pad(sabado.getDate())}/${pad(sabado.getMonth() + 1)}/${sabado.getFullYear()}`;
     };
-    const removeRejeitoRow = (id: number) => {
-        setRejeitosLogs(prev => prev.filter(item => item.id !== id));
+
+    // 🔥 Função addResiduoLog (com data automática)
+    const addResiduoLog = () => {
+        setResiduosLogs([...residuosLogs, {
+            id: Date.now(),
+            dataPeriodo: getCurrentWeekPeriod(),
+            terca: "",
+            sexta: "",
+            responsavelRecolhimento: null,
+            monitorResponsavel: null
+        }]);
     };
+
+    const updateResiduoLog = <K extends keyof ResiduosLog>(id: number, field: K, value: ResiduosLog[K]) => {
+        setResiduosLogs(prev => prev.map(log => log.id === id ? { ...log, [field]: value } : log));
+    };
+    const removeResiduoLog = (id: number) => setResiduosLogs(prev => prev.filter(log => log.id !== id));
 
     // --- Histórico ---
     const getHistoryRecord = () => {
         const now = new Date();
-        const tabNameMap: Record<CQTabType, string> = { vidros: "Vidros", pragas: "Pragas", inusuais: "Inusuais", rejeitos: "Rejeitos" };
+        const tabNameMap: Record<CQTabType, string> = { vidros: "Vidros", pragas: "Pragas", inusuais: "Inusuais", rejeitos: "Rejeitos", residuos: "Resíduos" };
         let totalItems = 0;
         if (activeTab === "vidros") totalItems = vidrosLogs.length;
         if (activeTab === "pragas") totalItems = pragasLogs.length;
         if (activeTab === "inusuais") totalItems = inusuaisLogs.length;
         if (activeTab === "rejeitos") totalItems = rejeitosLogs.length;
+        if (activeTab === "residuos") totalItems = residuosLogs.length;
+
         return {
             module: "qualidade",
             record: {
@@ -234,32 +270,34 @@ export function useControleQualidadeController() {
             console.log("Gerando arquivo Excel de Controle de Qualidade...");
             const now = new Date();
             const mesAtual = now.toISOString().slice(0, 7);
-            const tabNameMap: Record<CQTabType, string> = { vidros: "Vidros", pragas: "Pragas", inusuais: "Inusuais", rejeitos: "Rejeitos" };
-            const docCodeMap: Record<CQTabType, string> = { vidros: "PHU-022", pragas: "PHU-024", inusuais: "PHU-025", rejeitos: "PHU-026" };
+            const tabNameMap: Record<CQTabType, string> = { vidros: "Vidros", pragas: "Pragas", inusuais: "Inusuais", rejeitos: "Rejeitos", residuos: "Resíduos" };
+
+            const docCodeMap: Record<CQTabType, string> = {
+                vidros: "PHU-022",
+                pragas: "PHU-024",
+                inusuais: "PHU-025",
+                rejeitos: "PHU-026",
+                residuos: "PHU-027"
+            };
 
             const excelBlob = await exportControleQualidadeToExcel({
                 activeTab,
-                vidrosDate,
-                vidrosMonitor,
-                vidrosResp,
-                vidrosObs,
-                vidrosLogs,
+                vidrosDate, vidrosMonitor, vidrosResp, vidrosObs, vidrosLogs,
                 pragasLogs,
                 inusuaisLogs,
                 rejeitosLogs,
+                residuosLogs,
                 pragasColunas: colunasPragas,
                 pragasSetores: setoresPragas,
                 responsavel: pragasLogs[0]?.monitor || null,
             });
-
-            // ... resto (salvar documento, limpar estado, etc.)
-            // (mantenha o código que você já tem para salvar e limpar)
 
             let dadosQualidade = {};
             if (activeTab === "vidros") dadosQualidade = { vidrosDate, vidrosMonitor, vidrosResp, vidrosObs, vidrosLogs };
             if (activeTab === "pragas") dadosQualidade = { pragasLogs };
             if (activeTab === "inusuais") dadosQualidade = { inusuaisLogs };
             if (activeTab === "rejeitos") dadosQualidade = { rejeitosLogs };
+            if (activeTab === "residuos") dadosQualidade = { residuosLogs };
 
             const dadosDoBanco = {
                 popCode: docCodeMap[activeTab],
@@ -273,7 +311,7 @@ export function useControleQualidadeController() {
 
             await salvarDocumento("controle_qualidade", dadosDoBanco, excelBlob as Blob, `Qualidade_${activeTab}_${now.getTime()}.xlsx`);
 
-            // Limpar aba
+            // Limpar aba (mantendo um registro fixo para resíduos)
             switch (activeTab) {
                 case "vidros":
                     setVidrosDate(""); setVidrosMonitor(null); setVidrosResp(null); setVidrosObs("");
@@ -287,6 +325,17 @@ export function useControleQualidadeController() {
                     break;
                 case "rejeitos":
                     setRejeitosLogs([]);
+                    break;
+                case "residuos":
+                    // 🔥 Mantém um registro vazio com a semana atual
+                    setResiduosLogs([{
+                        id: Date.now(),
+                        dataPeriodo: getCurrentWeekPeriod(),
+                        terca: "",
+                        sexta: "",
+                        responsavelRecolhimento: null,
+                        monitorResponsavel: null
+                    }]);
                     break;
             }
 
@@ -306,6 +355,7 @@ export function useControleQualidadeController() {
         pragasLogs, addPragaLog, updatePragaLog, updatePragaGrid, removePragaLog,
         inusuaisLogs, addInusualLog, updateInusualLog, removeInusualLog,
         rejeitosLogs, addRejeitoRow, updateRejeitoRow, removeRejeitoRow,
+        residuosLogs, addResiduoLog, updateResiduoLog, removeResiduoLog,
         colunasPragas, setColunasPragas,
         setoresPragas, setSetoresPragas,
         adicionarPraga, removerPraga, adicionarSetor, removerSetor,

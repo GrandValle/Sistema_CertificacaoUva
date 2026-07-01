@@ -27,8 +27,24 @@ export interface ActionPlan {
     responsavel: string | null;
 }
 
+export interface ForeignObjectLog {
+    id: number;
+    date: string;
+    time: string;
+    location: string;
+    status: "C" | "NC" | null;
+    foundObject: string;
+    correctiveAction: string;
+    responsible: string | null;
+}
+
 // 🟢 Atualizado para cobrir as 4 telas operacionais
-export type TabType = "pre_inspecao" | "transporte" | "embalagem" | "limpeza";
+export type TabType = "pre_inspecao" | "transporte" | "embalagem" | "limpeza" | "objetos_estranhos";
+
+export const FOREIGN_OBJECT_LOCATIONS = [
+    "Recepção da fruta",
+    "Área de embalagem"
+];
 
 const rawData: Record<string, string[]> = {
     "Instalações": [
@@ -121,6 +137,12 @@ export const LEGENDA_EMBALAGEM = [
 export const LEGENDA_LIMPEZA = [
     "• SIM: Produto químico de limpeza recebido em total conformidade com a especificação técnica e FISPQ.",
     "• NÃO: Divergência de princípio ativo, ausência de rotulagem regulamentar ou embalagem danificada."
+];
+
+export const LEGENDA_OBJETOS_ESTRANHOS = [
+    "• C: Inspeção conforme, sem objeto estranho identificado no processo.",
+    "• NC: Não conforme, objeto estranho identificado durante a inspeção.",
+    "• OBSERVAÇÃO: Em caso de NC, registrar o objeto encontrado e ação corretiva."
 ];
 
 // 🟢 METADADOS DE CONTROLE DE REVISÃO DO MÓDULO

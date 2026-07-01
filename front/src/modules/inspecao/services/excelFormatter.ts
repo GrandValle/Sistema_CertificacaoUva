@@ -11,6 +11,7 @@ import {
     LEGENDA_TRANSPORTE,
     LEGENDA_EMBALAGEM,
     LEGENDA_LIMPEZA,
+    LEGENDA_OBJETOS_ESTRANHOS,
     COMPLIANCE_INSPECAO
 } from "../model/inspecaoModel";
 
@@ -100,16 +101,22 @@ interface ExportInspecaoParams {
     packagingLogs: any[];
     currentCleaningLogs: any[];
     selectedCleaningProduct: string;
+    objetosEstranhosLogs: any[];
 }
 
-export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpData, actionPlans, transportLogs, packagingLogs, currentCleaningLogs, selectedCleaningProduct }: ExportInspecaoParams) => {
+export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpData, actionPlans, transportLogs, packagingLogs, currentCleaningLogs, selectedCleaningProduct, objetosEstranhosLogs }: ExportInspecaoParams) => {
     const workbook = new ExcelJS.Workbook();
+
+    const hasObjetoEncontrado = objetosEstranhosLogs.some((log) => !!String(log.foundObject || "").trim());
+    const hasAcaoCorretiva = objetosEstranhosLogs.some((log) => !!String(log.correctiveAction || "").trim());
+    const objetosEstranhosMaxCol = 6 + (hasObjetoEncontrado ? 1 : 0) + (hasAcaoCorretiva ? 1 : 0);
 
     const docMap: Record<TabType, { code: string; title: string; maxCol: number }> = {
         pre_inspecao: { code: "2.11.7", title: "PRÉ-INSPEÇÃO OPERACIONAL", maxCol: 2 + WEEK_DAYS.length },
         transporte: { code: "PHU-031", title: "INSPEÇÃO DE TRANSPORTE DE COLHEITA", maxCol: 6 },
         embalagem: { code: "PHU-032", title: "INSPEÇÃO DE MATERIAL DE EMBALAGEM", maxCol: 10 },
         limpeza: { code: "PHU-036", title: "RECEBIMENTO DE MATERIAL DE LIMPEZA", maxCol: 8 },
+        objetos_estranhos: { code: "PHU-033", title: "CONTROLE DE INSPEÇÃO OBJETOS ESTRANHOS", maxCol: objetosEstranhosMaxCol },
     };
 
     const { code, title, maxCol } = docMap[activeTabParam];
@@ -134,6 +141,12 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
         ws.columns = [{ width: 18 }, { width: 15 }, { width: 15 }, { width: 15 }, { width: 16 }, { width: 30 }];
     } else if (activeTabParam === "embalagem") {
         ws.columns = [{ width: 18 }, { width: 22 }, { width: 12 }, { width: 14 }, { width: 14 }, { width: 16 }, { width: 18 }, { width: 18 }, { width: 25 }, { width: 28 }];
+    } else if (activeTabParam === "objetos_estranhos") {
+        const baseCols = [{ width: 14 }, { width: 12 }, { width: 22 }, { width: 8 }, { width: 8 }];
+        const optionalCols: Array<{ width: number }> = [];
+        if (hasObjetoEncontrado) optionalCols.push({ width: 28 });
+        if (hasAcaoCorretiva) optionalCols.push({ width: 30 });
+        ws.columns = [...baseCols, ...optionalCols, { width: 28 }];
     } else {
         ws.columns = [{ width: 18 }, { width: 25 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 28 }];
     }
@@ -151,7 +164,17 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
     ws.mergeCells(titleRow.number, 1, titleRow.number, maxCol);
     titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
 
-    const metaRows: string[] = [`Área: ${preOpInfo?.area || "Packing Uva"}`];
+    const selectedSetores = Array.from(
+        new Set(
+            objetosEstranhosLogs
+                .map((log) => String(log.location || "").trim())
+                .filter(Boolean)
+        )
+    );
+
+    const metaRows: string[] = activeTabParam === "objetos_estranhos"
+        ? [`Setor: ${selectedSetores.length > 0 ? selectedSetores.join(" / ") : "-"}`]
+        : [`Área: ${preOpInfo?.area || "Packing Uva"}`];
     if (activeTabParam === "pre_inspecao") metaRows.push(`Semana: ${preOpInfo.week || "-"}`);
     if (activeTabParam === "limpeza") metaRows.push(`Produto: ${selectedCleaningProduct || "Todos"}`);
     metaRows.push(`Código do documento: ${code}`);
@@ -314,6 +337,55 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
             await addTableSignature(workbook, ws, log.responsavel || null, dataRow.number, 8, dataRow.getCell(8));
         }
     }
+    else if (activeTabParam === "objetos_estranhos") {
+        const headers = [
+            "Data",
+            "Horário",
+            "Setor",
+            "C",
+            "NC",
+            ...(hasObjetoEncontrado ? ["Objeto Encontrado"] : []),
+            ...(hasAcaoCorretiva ? ["Ação Corretiva"] : []),
+            "Responsável"
+        ];
+        const oHeader = ws.addRow(headers);
+        oHeader.height = 24;
+        oHeader.eachCell(applyHeaderStyle);
+
+        const responsibleColIndex = headers.length;
+
+        const filledRows = objetosEstranhosLogs.filter(log =>
+            !!String(log.date || "").trim()
+            || !!String(log.time || "").trim()
+            || !!String(log.foundObject || "").trim()
+            || !!String(log.correctiveAction || "").trim()
+            || !!String(log.responsible || "").trim()
+            || !!String(log.status || "").trim()
+        );
+
+        for (const log of filledRows) {
+            const rowData = [
+                log.date ? log.date.split('-').reverse().join('/') : "",
+                log.time || "",
+                log.location || "",
+                log.status === "C" ? "SIM" : "",
+                log.status === "NC" ? "NÃO" : "",
+                ...(hasObjetoEncontrado ? [log.foundObject || ""] : []),
+                ...(hasAcaoCorretiva ? [log.correctiveAction || ""] : []),
+                ""
+            ];
+            const dataRow = ws.addRow(rowData);
+            dataRow.height = 75;
+            dataRow.eachCell((c, i) => {
+                const leftAlignedCols = [3];
+                if (hasObjetoEncontrado) leftAlignedCols.push(6);
+                if (hasAcaoCorretiva) leftAlignedCols.push(hasObjetoEncontrado ? 7 : 6);
+                applyDataStyle(c, !leftAlignedCols.includes(i));
+                applyColorIfSimNao(c);
+            });
+            await addTableSignature(workbook, ws, log.responsible || null, dataRow.number, responsibleColIndex, dataRow.getCell(responsibleColIndex));
+        }
+    }
 
     // --- 5. LEGENDAS ---
     ws.addRow([]);
@@ -323,7 +395,15 @@ export const exportInspecaoToExcel = async ({ activeTabParam, preOpInfo, preOpDa
     legendTitle.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B5563" } };
     legendTitle.height = 24;
 
-    const legendLines = activeTabParam === "pre_inspecao" ? LEGENDA_PRE_INSPECAO : activeTabParam === "transporte" ? LEGENDA_TRANSPORTE : activeTabParam === "embalagem" ? LEGENDA_EMBALAGEM : LEGENDA_LIMPEZA;
+    const legendLines = activeTabParam === "pre_inspecao"
+        ? LEGENDA_PRE_INSPECAO
+        : activeTabParam === "transporte"
+            ? LEGENDA_TRANSPORTE
+            : activeTabParam === "embalagem"
+                ? LEGENDA_EMBALAGEM
+                : activeTabParam === "objetos_estranhos"
+                    ? LEGENDA_OBJETOS_ESTRANHOS
+                    : LEGENDA_LIMPEZA;
     legendLines.forEach((line) => {
         const obsRow = ws.addRow([line]);
         ws.mergeCells(obsRow.number, 1, obsRow.number, maxCol);

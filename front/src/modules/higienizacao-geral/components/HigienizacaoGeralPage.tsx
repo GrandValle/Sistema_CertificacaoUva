@@ -1,8 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
-import { BiHistory, BiSearch, BiPlus, BiCube, BiNote, BiInfoCircle, BiWater, BiCalendar, BiTime, BiDownload, BiTrash } from "react-icons/bi";
+import { BiHistory, BiSearch, BiPlus, BiCube, BiNote, BiWater, BiCalendar, BiTime, BiDownload, BiTrash } from "react-icons/bi";
 import { SignatureSelector } from "../../../components/SignatureSelector";
 import { useHigienizacaoController } from "../controller/useHigienizacaoGeralController";
 import {
@@ -21,7 +21,7 @@ export default function HigienizacaoGeralPage() {
         activeArea,
         currentLogs: rawCurrentLogs,
         filteredAreas,
-        addRow, updateField, toggleCheck, setCheckValue,
+        addRow, removeRow, updateField, toggleCheck, setCheckValue,
         modoOperacao, setModoOperacao,
         exportarExcel,
         observacaoNC, setObservacaoNC,
@@ -30,11 +30,17 @@ export default function HigienizacaoGeralPage() {
         addTesouraWeek,
         updateTesouraWeek,
         updateTesouraDia,
-        removeTesouraWeek
+        removeTesouraWeek,
+        // Bebedouros
+        bebedourosLogs: rawBebedourosLogs,
+        addBebedouroRow,
+        updateBebedouroField,
+        removeBebedouroRow,
     } = controller;
 
     const tesourasLogs = rawTesourasLogs || [];
     const currentLogs = rawCurrentLogs || [];
+    const bebedourosLogs = rawBebedourosLogs || [];
 
     const setStatus = (idx: number, currentStatus: any, clickedStatus: string) => {
         const nextStatus = currentStatus === clickedStatus ? '' : clickedStatus;
@@ -47,8 +53,9 @@ export default function HigienizacaoGeralPage() {
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 lg:p-8 font-sans text-sm text-gray-800 relative">
-            <div className="max-w-7xl mx-auto">
-                {/* HEADER (inalterado) */}
+            <div className="max-w-400 w-full mx-auto transition-all duration-300">
+
+                {/* HEADER */}
                 <header className="relative bg-white rounded-2xl shadow-2xl mb-8 overflow-hidden border border-gray-100">
                     <div className="flex items-center justify-between p-4 md:p-6">
                         <div className="flex items-center gap-4">
@@ -91,8 +98,8 @@ export default function HigienizacaoGeralPage() {
                 </header>
 
                 <div className="flex flex-col lg:flex-row gap-8">
-                    {/* SIDEBAR (contém legenda e produto) */}
-                    <aside className="w-full lg:w-64 shrink-0 flex flex-col gap-4">
+                    {/* SIDEBAR */}
+                    <aside className="w-full lg:w-72 shrink-0 flex flex-col gap-4">
                         <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden">
                             <div className="bg-gray-900 p-4 pb-3">
                                 <div className="flex justify-between items-center">
@@ -125,49 +132,38 @@ export default function HigienizacaoGeralPage() {
                                             </div>
                                             <div className="flex justify-between items-center mt-2">
                                                 <span className={`text-xs px-2 py-0.5 rounded-full ${isAtiva ? "bg-white/20 text-white" : categoryColor}`}>{a.category}</span>
-                                                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${freqColor}`}>{freqType.charAt(0)}</span>
+                                                {a.id !== 'bebedouros' && (
+                                                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${freqColor}`}>{freqType.charAt(0)}</span>
+                                                )}
                                             </div>
-                                            <div className={`mt-2 text-[10px] italic flex items-center gap-1 ${isAtiva ? "text-blue-200" : "text-gray-500"}`}>{a.freq}</div>
+                                            {a.id !== 'bebedouros' && (
+                                                <div className={`mt-2 text-[10px] italic flex items-center gap-1 ${isAtiva ? "text-blue-200" : "text-gray-500"}`}>{a.freq}</div>
+                                            )}
                                         </button>
                                     );
                                 })}
                             </div>
-                            {/* LEGENDA E PRODUTO (aparecem para áreas matriciais e também para tesouras) */}
-                            {/* LEGENDA (APENAS para áreas matriciais, ex: Tesouras) */}
-                            {activeArea.isMatricial && activeArea.id !== 'transporte' && (
-                                <div className="bg-white rounded-2xl shadow-2xl p-5 border border-gray-100 mt-4">
-                                    <div className="flex items-center gap-2 mb-3 border-b border-gray-100 pb-2">
-                                        <BiInfoCircle className="text-blue-600" size={18} />
-                                        <h3 className="font-bold text-gray-800 text-sm">Legenda</h3>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-6 h-6 rounded bg-green-100 border border-green-200 flex items-center justify-center font-bold text-green-700 text-xs shadow-sm">C</div>
-                                            <p className="text-xs font-semibold text-gray-600">Conforme</p>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-6 h-6 rounded bg-red-100 border border-red-200 flex items-center justify-center font-bold text-red-700 text-xs shadow-sm">NC</div>
-                                            <p className="text-xs font-semibold text-gray-600">Não Conforme</p>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-6 h-6 rounded bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-gray-500 text-xs shadow-sm">Q.T</div>
-                                            <p className="text-xs font-semibold text-gray-600">Qtd. Tesouras</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
 
-                            {/* PRODUTOS / INSTRUÇÃO (aparece para TODAS as áreas) */}
+                            {/* PRODUTOS / INSTRUÇÕES DE USO (Apenas isso ficou da legenda) */}
                             <div className="bg-white rounded-2xl shadow-2xl p-5 border border-gray-100 mt-4">
                                 <div className="pt-2">
-                                    <div className="flex items-center gap-2 mb-2">
+                                    <div className="flex items-center gap-2 mb-3">
                                         <BiWater className="text-blue-400" size={16} />
                                         <h3 className="font-bold text-gray-800 text-[11px] uppercase tracking-tight">
-                                            {activeArea.isMatricial ? "Produto Usado" : "Legenda de produtos:"}
+                                            {activeArea.instrucaoUso ? "Materiais e Instruções:" : "Legenda de produtos:"}
                                         </h3>
                                     </div>
-                                    {activeArea.isMatricial && activeArea.instrucaoUso ? (
-                                        <p className="text-xs text-gray-500 leading-relaxed italic px-1">{activeArea.instrucaoUso}</p>
+
+                                    {activeArea.instrucaoUso ? (
+                                        <div className="flex flex-col gap-3">
+                                            {activeArea.instrucaoUso.split('|').map((block, idx) => (
+                                                <div key={idx} className="bg-blue-50 border border-blue-100 rounded-lg p-3 shadow-sm">
+                                                    <p className="text-[11px] text-gray-700 font-medium whitespace-pre-line leading-relaxed">
+                                                        {block.trim()}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </div>
                                     ) : (
                                         activeArea.produtos && activeArea.produtos.length > 0 && (
                                             <div className="space-y-2">
@@ -202,15 +198,21 @@ export default function HigienizacaoGeralPage() {
                                             </h1>
                                         </div>
                                         <div className="flex items-center gap-4 mt-2">
-                                            <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium border border-gray-200 uppercase">
-                                                {activeArea.freq}
-                                            </span>
+                                            {activeArea.id !== 'bebedouros' && (
+                                                <span className="inline-flex items-center gap-1 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium border border-gray-200 uppercase">
+                                                    {activeArea.freq}
+                                                </span>
+                                            )}
                                             <span className="text-xs text-gray-500">Código: {activeArea.doc}</span>
                                         </div>
                                     </div>
                                     {activeArea.id === 'tesouras' ? (
                                         <button onClick={addTesouraWeek} className="flex items-center justify-center gap-1.5 px-4 py-3 bg-linear-to-r from-green-500 to-emerald-600 text-white rounded-lg font-bold text-xs whitespace-nowrap hover:shadow-md transition-all active:scale-95 h-fit">
                                             <BiPlus size={16} /> Nova Semana
+                                        </button>
+                                    ) : activeArea.id === 'bebedouros' ? (
+                                        <button onClick={addBebedouroRow} className="flex items-center justify-center gap-1.5 px-4 py-3 bg-linear-to-r from-green-500 to-emerald-600 text-white rounded-lg font-bold text-xs whitespace-nowrap hover:shadow-md transition-all active:scale-95 h-fit">
+                                            <BiPlus size={16} /> Nova Linha
                                         </button>
                                     ) : (
                                         <button onClick={addRow} className="flex items-center justify-center gap-1.5 px-4 py-3 bg-linear-to-r from-green-500 to-emerald-600 text-white rounded-lg font-bold text-xs whitespace-nowrap hover:shadow-md transition-all active:scale-95 h-fit">
@@ -219,7 +221,7 @@ export default function HigienizacaoGeralPage() {
                                     )}
                                 </div>
 
-                                {activeArea.isMatricial && activeArea.id !== 'transporte' && activeArea.id !== 'tesouras' && (
+                                {activeArea.isMatricial && activeArea.id !== 'transporte' && activeArea.id !== 'tesouras' && activeArea.id !== 'bebedouros' && (
                                     <div className="flex items-center mt-4 pt-4 px-5 border-t border-gray-200">
                                         <div className="inline-flex bg-gray-100 border border-gray-200 rounded-lg p-1">
                                             <button onClick={() => setModoOperacao('packing')} className={`flex items-center gap-2 px-6 py-1.5 rounded-md text-xs font-bold transition-all ${modoOperacao === 'packing' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -230,13 +232,12 @@ export default function HigienizacaoGeralPage() {
                                 )}
                             </div>
 
-                            {/* TABELA DE ACORDO COM A ÁREA */}
+                            {/* TABELAS */}
                             <div className="overflow-x-auto rounded-b-lg bg-white">
                                 {activeArea.id === 'tesouras' ? (
                                     <div className="p-4">
-                                        {/* TABELA SEMANAL */}
                                         <div className="overflow-x-auto">
-                                            <table className="min-w-[800px] w-full border-collapse border border-gray-200 text-sm">
+                                            <table className="min-w-200 w-full border-collapse border border-gray-200 text-sm">
                                                 <thead>
                                                     <tr className="bg-gray-100">
                                                         <th className="border border-gray-200 px-3 py-2 text-left font-semibold">Período</th>
@@ -267,20 +268,8 @@ export default function HigienizacaoGeralPage() {
                                                         <tr key={week.id} className="hover:bg-gray-50">
                                                             <td className="border border-gray-200 px-2 py-2 align-middle">
                                                                 <div className="flex flex-col gap-1">
-                                                                    <input
-                                                                        type="date"
-                                                                        value={week.dataInicio || ''}
-                                                                        onChange={(e) => updateTesouraWeek(week.id, 'dataInicio', e.target.value)}
-                                                                        className="w-28 border border-gray-300 rounded px-1 py-0.5 text-xs"
-                                                                        placeholder="Início"
-                                                                    />
-                                                                    <input
-                                                                        type="date"
-                                                                        value={week.dataFim || ''}
-                                                                        onChange={(e) => updateTesouraWeek(week.id, 'dataFim', e.target.value)}
-                                                                        className="w-28 border border-gray-300 rounded px-1 py-0.5 text-xs"
-                                                                        placeholder="Fim"
-                                                                    />
+                                                                    <input type="date" value={week.dataInicio || ''} onChange={(e) => updateTesouraWeek(week.id, 'dataInicio', e.target.value)} className="w-28 border border-gray-300 rounded px-1 py-0.5 text-xs" />
+                                                                    <input type="date" value={week.dataFim || ''} onChange={(e) => updateTesouraWeek(week.id, 'dataFim', e.target.value)} className="w-28 border border-gray-300 rounded px-1 py-0.5 text-xs" />
                                                                 </div>
                                                             </td>
                                                             {DIAS_SEMANA_TESOURA.map(dia => (
@@ -314,24 +303,109 @@ export default function HigienizacaoGeralPage() {
                                             </table>
                                         </div>
 
-                                        {/* APENAS O CAMPO DE OBSERVAÇÕES DE NÃO CONFORMIDADE (mantido abaixo da tabela) */}
                                         <div className="mt-6">
                                             <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
                                                 <label className="flex items-center gap-2 text-xs font-bold text-gray-700 mb-2">
-                                                    <BiNote className="text-green-600" size={16} />
-                                                    Observações de Não Conformidade:
+                                                    <BiNote className="text-green-600" size={16} /> Observações de Não Conformidade:
                                                 </label>
-                                                <textarea
-                                                    value={observacaoNC}
-                                                    onChange={(e) => setObservacaoNC(e.target.value)}
-                                                    className="w-full h-20 p-3 border border-gray-300 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-green-500 outline-none resize-none"
-                                                    placeholder="Descreva as observações caso exista alguma não conformidade..."
-                                                />
+                                                <textarea value={observacaoNC} onChange={(e) => setObservacaoNC(e.target.value)} className="w-full h-20 p-3 border border-gray-300 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-green-500 outline-none resize-none" placeholder="Descreva as observações caso exista alguma não conformidade..." />
                                             </div>
                                         </div>
                                     </div>
+                                ) : activeArea.id === 'bebedouros' ? (
+                                    <div className="p-4">
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-200 w-full border-collapse border border-gray-200 text-sm transition-all">
+                                                <thead className="bg-gray-100">
+                                                    <tr>
+                                                        <th className="border border-gray-200 px-3 py-3 text-left w-32 font-semibold">Data</th>
+                                                        <th className="border border-gray-200 px-3 py-3 text-left w-64 font-semibold">Local</th>
+                                                        <th className="border border-gray-200 px-2 py-3 text-center w-20 font-semibold text-[11px] leading-tight">Limpeza<br />Bebedouro</th>
+                                                        <th className="border border-gray-200 px-2 py-3 text-center w-20 font-semibold text-[11px] leading-tight">Troca<br />Filtro</th>
+                                                        <th className="border border-gray-200 px-2 py-3 text-center w-20 font-semibold text-[11px] leading-tight">Manutenção<br />Bebedouro</th>
+
+                                                        <th className="border border-gray-200 px-3 py-3 text-left min-w-50 font-semibold text-red-700 bg-red-50">Observação</th>
+                                                        <th className="border border-gray-200 px-3 py-3 text-left min-w-50 font-semibold text-red-700 bg-red-50">Ação Corretiva</th>
+
+                                                        <th className="border border-gray-200 px-3 py-3 text-center min-w-37.5 font-semibold">Assinatura</th>
+                                                        <th className="border border-gray-200 px-2 py-3 text-center w-12"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {bebedourosLogs.map((log) => {
+                                                        return (
+                                                            <tr key={log.id} className="hover:bg-gray-50">
+                                                                <td className="border border-gray-200 px-2 py-2">
+                                                                    <input type="date" value={log.data} onChange={(e) => updateBebedouroField(log.id, 'data', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none" />
+                                                                </td>
+                                                                <td className="border border-gray-200 px-2 py-2 w-64 min-w-64">
+                                                                    <input type="text" value={log.local} onChange={(e) => updateBebedouroField(log.id, 'local', e.target.value)} className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Ex: Refeitório" />
+                                                                </td>
+
+                                                                {(['limpeza', 'trocaFiltro', 'manutencao'] as Array<'limpeza' | 'trocaFiltro' | 'manutencao'>).map((campo) => (
+                                                                    <td key={campo} className="border border-gray-200 px-1 py-2 text-center align-middle">
+                                                                        <div className="flex justify-center gap-1">
+                                                                            <button
+                                                                                onClick={() => updateBebedouroField(log.id, campo, log[campo] === 'S' ? '' : 'S')}
+                                                                                className={`w-7 h-7 rounded text-[10px] font-bold border transition-all ${log[campo] === 'S' ? 'bg-green-100 text-green-700 border-green-400 shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:border-green-300'}`}
+                                                                            >S</button>
+                                                                            <button
+                                                                                onClick={() => updateBebedouroField(log.id, campo, log[campo] === 'N' ? '' : 'N')}
+                                                                                className={`w-7 h-7 rounded text-[10px] font-bold border transition-all ${log[campo] === 'N' ? 'bg-red-100 text-red-600 border-red-400 shadow-sm' : 'bg-white text-gray-400 border-gray-200 hover:border-red-300'}`}
+                                                                            >N</button>
+                                                                        </div>
+                                                                    </td>
+                                                                ))}
+
+                                                                <td className="border border-gray-200 px-2 py-2 bg-red-50/30">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={log.observacao || ''}
+                                                                        onChange={(e) => updateBebedouroField(log.id, 'observacao', e.target.value)}
+                                                                        className="w-full border border-red-200 rounded px-2 py-1.5 text-xs focus:ring-1 focus:ring-red-500 outline-none"
+                                                                        placeholder="Observações..."
+                                                                    />
+                                                                </td>
+                                                                <td className="border border-gray-200 px-2 py-2 bg-red-50/30">
+                                                                    <input
+                                                                        type="text"
+                                                                        value={log.acaoCorretiva || ''}
+                                                                        onChange={(e) => updateBebedouroField(log.id, 'acaoCorretiva', e.target.value)}
+                                                                        className="w-full border border-red-200 rounded px-2 py-1.5 text-xs focus:ring-1 focus:ring-red-500 outline-none"
+                                                                        placeholder="Ação Corretiva..."
+                                                                    />
+                                                                </td>
+
+                                                                <td className="border border-gray-200 px-2 py-2">
+                                                                    <SignatureSelector value={log.signature || null} onChange={(v) => updateBebedouroField(log.id, 'signature', v ?? '')} />
+                                                                </td>
+
+                                                                <td className="border border-gray-200 px-2 py-2 text-center align-middle">
+                                                                    <button
+                                                                        onClick={() => removeBebedouroRow(log.id)}
+                                                                        disabled={bebedourosLogs.length <= 1}
+                                                                        className={`transition-colors ${bebedourosLogs.length <= 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-500'}`}
+                                                                        title={bebedourosLogs.length <= 1 ? "É necessário manter ao menos 1 registro" : "Remover linha"}
+                                                                    >
+                                                                        <BiTrash size={18} />
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                    {bebedourosLogs.length === 0 && (
+                                                        <tr>
+                                                            <td colSpan={9} className="text-center py-6 text-gray-500 bg-white">
+                                                                Nenhum registro. Clique no botão de Nova Linha acima para adicionar.
+                                                            </td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        {/* REMOVIDO: O footer que ficava aqui com PHU e Assinatura Geral de Bebedouros foi excluído com sucesso */}
+                                    </div>
                                 ) : activeArea.id === 'transporte' ? (
-                                    // Tabela de Transporte (inalterada)
                                     <table className="min-w-full divide-y divide-gray-200">
                                         <thead className="bg-gray-50">
                                             <tr>
@@ -362,7 +436,6 @@ export default function HigienizacaoGeralPage() {
                                         </tbody>
                                     </table>
                                 ) : (
-                                    // Tabela padrão (Panos, etc.)
                                     <table className="min-w-full divide-y divide-gray-200">
                                         <thead className="bg-gray-50">
                                             <tr>
@@ -380,6 +453,7 @@ export default function HigienizacaoGeralPage() {
                                                         <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assinatura</th>
                                                     </>
                                                 )}
+                                                <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider w-12"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -419,6 +493,17 @@ export default function HigienizacaoGeralPage() {
                                                             <td className="px-4 py-3 align-middle min-w-48"><SignatureSelector value={reg.signature} onChange={(v: any) => updateField(idx, 'signature', v || "")} /></td>
                                                         </>
                                                     )}
+                                                    <td className="px-4 py-3 align-middle text-center w-12">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeRow(idx)}
+                                                            disabled={currentLogs.length <= 1}
+                                                            className={`transition-colors ${currentLogs.length <= 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-500'}`}
+                                                            title={currentLogs.length <= 1 ? "É necessário manter ao menos 1 registro" : "Remover linha"}
+                                                        >
+                                                            <BiTrash size={18} />
+                                                        </button>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -426,8 +511,7 @@ export default function HigienizacaoGeralPage() {
                                 )}
                             </div>
 
-                            {/* OBSERVAÇÕES PARA ÁREAS NORMAIS (quando aplicável) */}
-                            {activeArea.isMatricial && activeArea.id !== 'transporte' && activeArea.id !== 'tesouras' && (
+                            {activeArea.isMatricial && activeArea.id !== 'transporte' && activeArea.id !== 'tesouras' && activeArea.id !== 'bebedouros' && (
                                 <div className="bg-gray-50 p-4 md:p-6 flex flex-col gap-4 border-t border-gray-100">
                                     <div className="flex justify-between items-center text-xs text-gray-500">
                                         <div>Total de registros na tela: <span className="font-bold text-gray-700">{currentLogs.length}</span></div>

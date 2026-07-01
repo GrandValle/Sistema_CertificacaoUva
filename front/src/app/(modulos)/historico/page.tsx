@@ -65,12 +65,22 @@ function HistoricoPageContent() {
                     // Acessa o primeiro item do array 'arquivos' (se existir)
                     const arquivo = record.documentos?.[0];
 
+                    const aba = String(record.aba || "").trim();
+                    const setor = String(record.setor || "").trim();
+                    const areaBase = record.setor || record.area || record.tipo || record.aba || "-";
+
+                    const areaFormatada = moduleType === "inspecao"
+                        ? (aba && setor && aba.toLowerCase() !== setor.toLowerCase()
+                            ? `${aba} - ${setor}`
+                            : areaBase)
+                        : areaBase;
+
                     return {
                         id: record.id,
                         nome: record.nome || "",
                         empresa: record.empresa || "",
                         mes: record.mes || record.semana || "-",
-                        area: record.setor || record.area || record.tipo || record.aba || "-",
+                        area: areaFormatada,
                         frequencia: record.frequencia || "-",
                         status: String(record.status || "completo").toLowerCase(),
                         exportedAt: arquivo?.criadoEm || record.createdAt || new Date().toISOString(),
@@ -206,7 +216,19 @@ function HistoricoPageContent() {
             description: "Consulte os registros de inspeção realizados.",
             backLink: "/inspecao",
             backText: "Voltar para Inspeção",
-            customFilter: { name: "Áreas", key: "area", values: ["Pré-Inspeção", "Transporte", "Embalagem", "Limpeza"] },
+            customFilter: {
+                name: "Áreas",
+                key: "area",
+                values: [
+                    "Pré-Inspeção",
+                    "Transporte",
+                    "Embalagem",
+                    "Limpeza",
+                    "Objetos Estranhos",
+                    "Objetos Estranhos - Recepção da fruta",
+                    "Objetos Estranhos - Área de embalagem"
+                ]
+            },
             columns: [
                 { key: "id", label: "ID", render: renderIdShort },
                 { key: "mes", label: "Mês / Ano" },

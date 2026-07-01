@@ -11,7 +11,8 @@ const USERS = [
     "JOANA DARCK",
     "NEILMA ALDENORA DA CONCEIÇÃO OLIVEIRA",
     "EDINALDO CERQUEIRA AMORIM",
-    "JOÃO VITOR SANTOS SILVA"
+    "JOÃO VITOR SANTOS SILVA",
+    "ALEX SANDRO RIBEIRO DE SOUZA",
 ];
 
 const normalizeCompare = (str: string) =>

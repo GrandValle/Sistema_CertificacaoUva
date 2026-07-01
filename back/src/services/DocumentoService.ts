@@ -291,27 +291,4 @@ export class DocumentoService {
         // Deleta o pai
         return await prisma.higienizacaoGeral.delete({ where: { id } });
     }
-
-    // ============================================================================
-    // 5. LIMPAR BASE DE DADOS
-    // ============================================================================
-    static async limparTodosOsDados() {
-        return await prisma.$transaction(async (tx) => {
-            await tx.documentoExportado.deleteMany();
-            await tx.controleAcesso.deleteMany();
-            await tx.manutencaoCalibracao.deleteMany();
-            await tx.condutaHigiene.deleteMany();
-            await tx.controleQualidade.deleteMany();
-            await tx.estoqueMaterial.deleteMany();
-            await tx.inspecaoOperacional.deleteMany();
-            await tx.higienizacaoGeral.deleteMany();
-            await tx.questionarioVisitante.deleteMany();
-            await tx.procedimentoOperacional.deleteMany();
-
-            return {
-                sucesso: true,
-                mensagem: "Todos os dados foram apagados com sucesso.",
-            };
-        });
-    }
 }

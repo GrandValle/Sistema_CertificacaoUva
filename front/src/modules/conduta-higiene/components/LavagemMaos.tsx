@@ -12,6 +12,8 @@ import { DAYS } from "../model/condutaModel";
 
 interface LavagemMaosProps {
     weekDays: any[];
+    lavagemHorarios: Record<string, { manha: string; tarde: string }>;
+    setLavagemHorarios: React.Dispatch<React.SetStateAction<Record<string, { manha: string; tarde: string }>>>;
     lavagemLogs: any[];
     setLavagemLogs: React.Dispatch<React.SetStateAction<any[]>>;
     updateLavagemRow: (id: number, nome: string) => void;
@@ -53,6 +55,8 @@ const BadgeContrato = ({ tipo, ativo, onClick, disabled }: { tipo: string; ativo
 
 export default function LavagemMaos({
     weekDays,
+    lavagemHorarios,
+    setLavagemHorarios,
     lavagemLogs,
     setLavagemLogs,
     toggleLavagemCell,
@@ -124,7 +128,6 @@ export default function LavagemMaos({
     const iniciarEdicao = (colab: any) => {
         setEditandoId(colab.id);
         setEditNome(colab.nome);
-        // Se já estiver desligado, mostra DESLIGADO no select
         setEditTipo(colab.ativo ? colab.tipo : "DESLIGADO");
     };
 
@@ -138,7 +141,6 @@ export default function LavagemMaos({
         if (!editNome.trim()) return;
         setLoading(true);
         try {
-            // 🔥 Lógica nova: Se escolheu desligar, desliga. Se não, atualiza normal.
             if (editTipo === "DESLIGADO") {
                 await desativarColaborador(id);
             } else {
@@ -238,7 +240,7 @@ export default function LavagemMaos({
                     </button>
                 </div>
                 <div className="px-6 py-4 bg-slate-50 border-b border-slate-200">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3">
                         <span className="text-sm font-black text-slate-700 uppercase tracking-wider">Local:</span>
                         <span className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-bold text-sm uppercase tracking-wider shadow-md">
                             Packing House
@@ -247,35 +249,59 @@ export default function LavagemMaos({
                 </div>
 
                 {/* Tabela */}
-                <div className="overflow-auto max-h-[500px]">
-                    <table className="w-full text-left text-sm relative border-collapse">
+                <div className="overflow-auto max-h-125">
+                    <table className="w-full text-left text-sm relative border-collapse border border-slate-300">
                         <thead className="sticky top-0 z-20 shadow-sm bg-slate-100">
                             <tr className="border-b border-slate-200">
-                                <th rowSpan={2} className="py-4 px-4 font-bold text-slate-700 text-xs uppercase tracking-widest sticky left-0 top-0 bg-slate-100 z-30 w-80 border-r border-slate-200 align-middle">
+                                <th rowSpan={2} className="py-4 px-4 font-bold text-slate-700 text-xs uppercase tracking-widest sticky left-0 top-0 bg-slate-100 z-30 w-96 min-w-84 border-r border-slate-300 align-middle">
                                     Colaborador
                                 </th>
                                 {weekDays.map((day) => (
-                                    <th colSpan={2} key={day.short} className="border-r border-b border-slate-200 bg-slate-50">
+                                    <th colSpan={2} key={day.short} className="border-r border-b border-slate-300 bg-slate-50">
                                         <div className="flex flex-col items-center py-2">
                                             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">{day.short}</span>
                                             <span className="text-[13px] font-black text-slate-800 mt-1">{day.label?.match(/\((.*?)\)/)?.[1] || ""}</span>
                                         </div>
                                     </th>
                                 ))}
-                                <th rowSpan={2} className="py-4 px-4 font-bold text-slate-700 text-xs uppercase tracking-widest w-20 text-center border-r border-slate-200 align-middle bg-slate-100">
+                                <th rowSpan={2} className="py-4 px-4 font-bold text-slate-700 text-xs uppercase tracking-widest w-20 text-center border-r border-slate-300 align-middle bg-slate-100">
                                     Ações
                                 </th>
                             </tr>
-                            <tr className="bg-slate-50 border-b border-slate-200">
+                            <tr className="bg-slate-50 border-b border-slate-300">
                                 {DAYS.map((day) => (
                                     <React.Fragment key={`sub-${day}`}>
-                                        <th className="py-2 text-center font-bold text-indigo-700 text-[9px] uppercase border-r border-slate-200 min-w-10 bg-slate-50">09h</th>
-                                        <th className="py-2 text-center font-bold text-indigo-700 text-[9px] uppercase border-r border-slate-200 min-w-10 bg-slate-50">14h</th>
+                                        <th className="py-2 px-1 text-center border-r border-slate-300 min-w-20 bg-slate-50">
+                                            <input
+                                                type="time"
+                                                value={lavagemHorarios?.[day]?.manha || "09:00"}
+                                                onChange={(e) =>
+                                                    setLavagemHorarios((prev) => ({
+                                                        ...prev,
+                                                        [day]: { ...(prev?.[day] || { manha: "09:00", tarde: "14:00" }), manha: e.target.value },
+                                                    }))
+                                                }
+                                                className="w-full h-7 border border-indigo-200 rounded px-1 text-[10px] font-bold text-indigo-700 bg-white outline-none focus:border-indigo-500"
+                                            />
+                                        </th>
+                                        <th className="py-2 px-1 text-center border-r border-slate-300 min-w-20 bg-slate-50">
+                                            <input
+                                                type="time"
+                                                value={lavagemHorarios?.[day]?.tarde || "14:00"}
+                                                onChange={(e) =>
+                                                    setLavagemHorarios((prev) => ({
+                                                        ...prev,
+                                                        [day]: { ...(prev?.[day] || { manha: "09:00", tarde: "14:00" }), tarde: e.target.value },
+                                                    }))
+                                                }
+                                                className="w-full h-7 border border-indigo-200 rounded px-1 text-[10px] font-bold text-indigo-700 bg-white outline-none focus:border-indigo-500"
+                                            />
+                                        </th>
                                     </React.Fragment>
                                 ))}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-slate-200">
                             {lavagemLogs
                                 .filter(row => {
                                     // 🔥 BARREIRA ANTI-FANTASMA:
@@ -283,12 +309,13 @@ export default function LavagemMaos({
                                     // ou se for uma linha vazia (para evitar bugar novas inserções)
                                     return colaboradores.some(c => c.nome === row.colaborador) || row.colaborador === "";
                                 })
-                                .map((row) => {
+                                .map((row, rowIndex) => {
                                     const colab = colaboradores.find(c => c.nome === row.colaborador);
                                     const isEditing = editandoId === colab?.id;
+                                    const rowBg = rowIndex % 2 === 0 ? "bg-white" : "bg-slate-50";
                                     return (
-                                        <tr key={row.id} className="hover:bg-indigo-50/20 transition-colors bg-white">
-                                            <td className="p-2 sticky left-0 bg-white z-10 border-r border-gray-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                                        <tr key={row.id} className={`hover:bg-indigo-50/70 transition-colors ${rowBg}`}>
+                                            <td className={`p-2 sticky left-0 z-10 border-r border-slate-300 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.08)] ${rowBg}`}>
                                                 {isEditing ? (
                                                     <div className="flex flex-col gap-2">
                                                         <input
@@ -310,8 +337,8 @@ export default function LavagemMaos({
                                                         </select>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex items-center justify-between gap-2 w-full p-2 text-sm bg-gray-50 rounded-lg border border-gray-200">
-                                                        <span className={`font-bold uppercase line-clamp-1 flex-1 ${colab?.ativo === false ? 'text-gray-400 line-through' : 'text-slate-800'}`}>
+                                                    <div className="flex items-center justify-between gap-2 w-full p-2 text-sm bg-white rounded-lg border border-slate-300">
+                                                        <span title={row.colaborador || "NOME NÃO CADASTRADO"} className={`font-bold uppercase flex-1 leading-tight ${colab?.ativo === false ? 'text-gray-400 line-through' : 'text-slate-800'}`}>
                                                             {row.colaborador || "NOME NÃO CADASTRADO"}
                                                         </span>
                                                         {colab && (
@@ -333,26 +360,26 @@ export default function LavagemMaos({
                                                     <React.Fragment key={`cell-${row.id}-${day}`}>
                                                         <td
                                                             onClick={() => toggleLavagemCell(row.id, day, "manha")}
-                                                            className="p-1 border-r border-gray-200 cursor-pointer text-center hover:bg-gray-50 bg-white"
+                                                            className="p-1 border-r border-slate-300 cursor-pointer text-center hover:bg-slate-100"
                                                         >
                                                             <div className={`w-9 h-9 mx-auto rounded-md flex items-center justify-center transition-all ${m === "C"
                                                                 ? "bg-green-500 text-white shadow-sm scale-110"
                                                                 : m === "NC"
                                                                     ? "bg-red-500 text-white shadow-sm scale-110"
-                                                                    : "bg-slate-100 text-slate-400"
+                                                                    : "bg-slate-200 text-slate-500 border border-slate-300"
                                                                 }`}>
                                                                 <span className="font-black text-xs">{m || "—"}</span>
                                                             </div>
                                                         </td>
                                                         <td
                                                             onClick={() => toggleLavagemCell(row.id, day, "tarde")}
-                                                            className="p-1 border-r border-gray-200 cursor-pointer text-center hover:bg-gray-50 bg-white"
+                                                            className="p-1 border-r border-slate-300 cursor-pointer text-center hover:bg-slate-100"
                                                         >
                                                             <div className={`w-9 h-9 mx-auto rounded-md flex items-center justify-center transition-all ${t === "C"
                                                                 ? "bg-green-500 text-white shadow-sm scale-110"
                                                                 : t === "NC"
                                                                     ? "bg-red-500 text-white shadow-sm scale-110"
-                                                                    : "bg-slate-100 text-slate-400"
+                                                                    : "bg-slate-200 text-slate-500 border border-slate-300"
                                                                 }`}>
                                                                 <span className="font-black text-xs">{t || "—"}</span>
                                                             </div>
@@ -360,7 +387,7 @@ export default function LavagemMaos({
                                                     </React.Fragment>
                                                 );
                                             })}
-                                            <td className="p-2 text-center align-middle bg-white">
+                                            <td className={`p-2 text-center align-middle border-r border-slate-300 ${rowBg}`}>
                                                 {colab && (
                                                     isEditing ? (
                                                         <div className="flex justify-center items-center gap-2 flex-wrap">

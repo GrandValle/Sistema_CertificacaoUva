@@ -1,11 +1,10 @@
-"use client";
-
 import * as ExcelJS from "exceljs";
 import {
     LEGENDA_VIDROS,
     LEGENDA_PRAGAS,
     LEGENDA_INUSUAIS,
     LEGENDA_REJEITOS,
+    LEGENDA_RESIDUOS,
     PRAGAS_SETORES,
     PRAGAS_COLUNAS
 } from "../model/controleQualidadeModel";
@@ -85,6 +84,7 @@ interface ExportExcelParams {
     pragasLogs?: any[];
     inusuaisLogs?: any[];
     rejeitosLogs?: any[];
+    residuosLogs?: any[];
     actionPlans?: any[];
     responsavel?: string | null;
     respPacking?: string | null;
@@ -102,6 +102,7 @@ export const exportControleQualidadeToExcel = async ({
     pragasLogs = [],
     inusuaisLogs = [],
     rejeitosLogs = [],
+    residuosLogs = [],
     actionPlans = [],
     responsavel: responsavelParam,
     respPacking: respPackingParam,
@@ -113,7 +114,6 @@ export const exportControleQualidadeToExcel = async ({
     const worksheet = workbook.addWorksheet("Qualidade");
     const baseUrl = window.location.origin;
 
-    // --- Definir colunas e setores dinâmicos para pragas ---
     const colunasPragas = (activeTab === "pragas" && pragasColunasParam && pragasColunasParam.length > 0)
         ? pragasColunasParam
         : PRAGAS_COLUNAS;
@@ -122,14 +122,12 @@ export const exportControleQualidadeToExcel = async ({
         ? pragasSetoresParam
         : PRAGAS_SETORES;
 
-    // --- 1. DEFINIÇÃO DINÂMICA DE HEADERS (COM CONDICIONAL PARA PRAGAS) ---
     let headers: string[] = [];
     let temAcaoCorretiva = false;
 
     if (activeTab === "vidros") {
         headers = ["Verificar (Item)", "Status", "Ação Recomendada", "Observação", "Tempo de Correção"];
     } else if (activeTab === "pragas") {
-        // 🟢 CORREÇÃO AQUI: Validação segura que impede o undefined de ativar a coluna
         temAcaoCorretiva = pragasLogs.some(log => {
             const acao = log.grid?.['GERAL_AcaoCorretiva'];
             return acao && acao.trim() !== '';
@@ -143,17 +141,17 @@ export const exportControleQualidadeToExcel = async ({
         headers = ["Data", "Descrição do Acontecimento", "Ação Corretiva", "Resp. Correção", "Resp. Packing"];
     } else if (activeTab === "rejeitos") {
         headers = ["Produto/Material", "Quantidade/Kg", "Local de Destino", "Data de Retenção", "Resp. Retenção", "Data de Saída", "Resp. Rejeitados"];
+    } else if (activeTab === "residuos") {
+        headers = ["Data Período", "Terça", "Sexta", "Responsável / Recolhimento", "Monitor Responsável"];
     }
 
     const maxCol = headers.length || 7;
 
-    // --- 2. CONFIGURAÇÃO DE PÁGINA ---
     worksheet.pageSetup = {
         paperSize: 9, orientation: "landscape", fitToPage: true, fitToWidth: 1, fitToHeight: 0,
         margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 }
     };
 
-    // --- 3. LOGO ---
     const logoRow = worksheet.addRow([]);
     logoRow.height = 70;
     try {
@@ -167,12 +165,13 @@ export const exportControleQualidadeToExcel = async ({
 
     worksheet.addRow([]);
 
-    // --- 4. TÍTULO ---
+    // 🔥 TÍTULOS (removido "PHU" do título de resíduos)
     const titulosMap: any = {
         vidros: "MONITORAMENTO DE VIDRO E PLÁSTICO RÍGIDO",
         pragas: "MONITORAMENTO DE VETORES E PRAGAS URBANAS",
         inusuais: "REGISTRO DE ACONTECIMENTOS INUSUAIS",
-        rejeitos: "REGISTRO DIÁRIO DE RETIDOS E REJEITOS"
+        rejeitos: "REGISTRO DIÁRIO DE RETIDOS E REJEITOS",
+        residuos: "CONTROLE DE RESÍDUOS"
     };
 
     const titleRow = worksheet.addRow([titulosMap[activeTab] || "CONTROLE DE QUALIDADE"]);
@@ -180,20 +179,27 @@ export const exportControleQualidadeToExcel = async ({
     titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
     titleRow.height = 50;
 
+    // 🔥 LINHA: Exportado em (sempre presente)
     worksheet.addRow([`Exportado em: ${new Date().toLocaleString("pt-BR")}`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
 
+    // 🔥 LINHA: Área (apenas para resíduos)
+    if (activeTab === "residuos") {
+        worksheet.addRow(["Área: Packing House"]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
+    }
+
+    // 🔥 LINHA: Frequência (apenas vidros)
     if (activeTab === "vidros") {
         worksheet.addRow([`Frequência: Semanal`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
         worksheet.addRow([`Data da verificação: ${formatSafeDate(vidrosDate || new Date().toISOString().split("T")[0])}`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
     }
 
+    // 🔥 LINHA: Data de Registro (apenas pragas - removido para resíduos)
     if (activeTab === "pragas") {
         worksheet.addRow([`Data de Registro: ${new Date().toLocaleDateString("pt-BR")}`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
     }
 
     worksheet.addRow([]);
 
-    // --- 5. ASSINATURAS NO CABEÇALHO ---
     const processSignature = async (label: string, value: string | null | undefined) => {
         const row = worksheet.addRow([label, value ? formatName(value) : "_________________________________"]);
         const rowHeight = 60;
@@ -227,58 +233,45 @@ export const exportControleQualidadeToExcel = async ({
     if (activeTab === "vidros") {
         await processSignature("Assinatura do Monitor:", vidrosMonitor);
         await processSignature("Assinatura do Resp. Packing:", vidrosResp);
+    } else if (activeTab === "residuos") {
+        // Para resíduos, não adicionamos assinaturas no cabeçalho (as assinaturas estão nas linhas da tabela)
     } else {
         if (responsavel) await processSignature("Assinatura do Responsável:", responsavel);
         if (respPacking) await processSignature("Assinatura do Resp. Packing:", respPacking);
     }
     worksheet.addRow([]);
 
-    // --- 6. TABELA (ESTILOS E CABEÇALHOS) ---
+    // --- LARGURAS DAS COLUNAS ---
     if (activeTab === "vidros") {
         worksheet.columns = [{ width: 30 }, { width: 12 }, { width: 35 }, { width: 35 }, { width: 20 }];
     } else if (activeTab === "pragas") {
         worksheet.getColumn(1).width = 25;
-
         colunasPragas.forEach((coluna, index) => {
             const colNumber = index + 2;
             const colLower = coluna.toLowerCase();
-            let width = 14; // padrão
-
-            if (colLower.includes('armadilha') || colLower.includes('armadilhas')) {
-                width = 18;
-            } else if (colLower.includes('quantidade')) {
-                width = 22;
-            } else if (colLower.includes('encontrada')) {
-                width = 20;
-            } else if (colLower.includes('ação') || colLower.includes('corretiva')) {
-                width = 35;
-            } else if (colLower.length > 12) {
-                width = 18;
-            }
+            let width = 14;
+            if (colLower.includes('armadilha') || colLower.includes('armadilhas')) width = 18;
+            else if (colLower.includes('quantidade')) width = 22;
+            else if (colLower.includes('encontrada')) width = 20;
+            else if (colLower.includes('ação') || colLower.includes('corretiva')) width = 35;
+            else if (colLower.length > 12) width = 18;
             worksheet.getColumn(colNumber).width = width;
         });
-
         if (temAcaoCorretiva) {
             const lastCol = colunasPragas.length + 2;
             worksheet.getColumn(lastCol).width = 40;
         }
     } else if (activeTab === "inusuais") {
-        worksheet.columns = [
-            { width: 15 },
-            { width: 45 },
-            { width: 40 },
-            { width: 45 },
-            { width: 45 }
-        ];
+        worksheet.columns = [{ width: 15 }, { width: 45 }, { width: 40 }, { width: 45 }, { width: 45 }];
     } else if (activeTab === "rejeitos") {
+        worksheet.columns = [{ width: 30 }, { width: 15 }, { width: 25 }, { width: 18 }, { width: 45 }, { width: 18 }, { width: 45 }];
+    } else if (activeTab === "residuos") {
         worksheet.columns = [
-            { width: 30 },
-            { width: 15 },
-            { width: 25 },
-            { width: 18 },
-            { width: 45 },
-            { width: 18 },
-            { width: 45 }
+            { width: 25 }, // Data Período
+            { width: 12 }, // Terça
+            { width: 12 }, // Sexta
+            { width: 40 }, // Responsável / Recolhimento
+            { width: 40 }  // Monitor Responsável
         ];
     }
 
@@ -315,6 +308,8 @@ export const exportControleQualidadeToExcel = async ({
                     verticalAlign = "bottom";
                 } else if (activeTab === "rejeitos" && (colNumber === 5 || colNumber === 7)) {
                     verticalAlign = "bottom";
+                } else if (activeTab === "residuos" && (colNumber === 4 || colNumber === 5)) {
+                    verticalAlign = "bottom";
                 }
             }
             cell.alignment = {
@@ -325,7 +320,7 @@ export const exportControleQualidadeToExcel = async ({
         });
     };
 
-    // --- 7. DADOS ---
+    // --- DADOS ---
     if (activeTab === "vidros") {
         const filteredRows = vidrosLogs.filter(r => r.item !== "Outros" && !(r.item?.startsWith("Outros:") && r.item.replace("Outros:", "").trim() === ""));
         for (let i = 0; i < filteredRows.length; i++) {
@@ -363,11 +358,9 @@ export const exportControleQualidadeToExcel = async ({
                 formatName(row.respCorrecao),
                 formatName(row.respPacking)
             ]);
-
             applyRowStyle(dataRow, true);
             dataRow.getCell(4).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
             dataRow.getCell(5).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
-
             await addTableSignature(row.respCorrecao, dataRow.number, 4);
             await addTableSignature(row.respPacking, dataRow.number, 5);
         }
@@ -382,11 +375,9 @@ export const exportControleQualidadeToExcel = async ({
                 formatSafeDate(rejeito.dataSaida),
                 formatName(rejeito.responsavelRejeitados)
             ]);
-
             applyRowStyle(dataRow, true);
             dataRow.getCell(5).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
             dataRow.getCell(7).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
-
             await addTableSignature(rejeito.responsavelRetencao, dataRow.number, 5);
             await addTableSignature(rejeito.responsavelRejeitados, dataRow.number, 7);
         }
@@ -422,10 +413,8 @@ export const exportControleQualidadeToExcel = async ({
                     action.naoConformidade || "", "",
                     action.acaoCorretiva || "", "", "", ""
                 ]);
-
                 worksheet.mergeCells(pacRow.number, 2, pacRow.number, 3);
                 worksheet.mergeCells(pacRow.number, 4, pacRow.number, 7);
-
                 applyRowStyle(pacRow, false);
                 pacRow.height = 40;
                 pacRow.getCell(1).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
@@ -433,13 +422,33 @@ export const exportControleQualidadeToExcel = async ({
                 pacRow.getCell(4).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
             }
         }
+    } else if (activeTab === "residuos") {
+        for (const residuo of residuosLogs) {
+            const dataRow = worksheet.addRow([
+                residuo.dataPeriodo || "",
+                residuo.terca === "SIM" ? "SIM" : "NÃO",
+                residuo.sexta === "SIM" ? "SIM" : "NÃO",
+                formatName(residuo.responsavelRecolhimento),
+                formatName(residuo.monitorResponsavel)
+            ]);
+            applyRowStyle(dataRow, true);
+            dataRow.getCell(4).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
+            dataRow.getCell(5).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
+
+            await addTableSignature(residuo.responsavelRecolhimento, dataRow.number, 4);
+            await addTableSignature(residuo.monitorResponsavel, dataRow.number, 5);
+        }
     }
 
-    // --- 8. LEGENDA E CONTROLE DE REVISÃO ---
+    // --- LEGENDA ---
     worksheet.addRow([]);
 
     const legendasMap: Record<string, string[]> = {
-        vidros: LEGENDA_VIDROS, pragas: LEGENDA_PRAGAS, inusuais: LEGENDA_INUSUAIS, rejeitos: LEGENDA_REJEITOS
+        vidros: LEGENDA_VIDROS,
+        pragas: LEGENDA_PRAGAS,
+        inusuais: LEGENDA_INUSUAIS,
+        rejeitos: LEGENDA_REJEITOS,
+        residuos: LEGENDA_RESIDUOS
     };
 
     const legendaSelecionada = legendasMap[activeTab] || [];
@@ -449,7 +458,6 @@ export const exportControleQualidadeToExcel = async ({
         const inusuaisTitleRow = worksheet.addRow([inusuaisTitulo]);
         worksheet.mergeCells(inusuaisTitleRow.number, 1, inusuaisTitleRow.number, maxCol);
         inusuaisTitleRow.getCell(1).font = { bold: true, color: { argb: "FF1F2937" }, size: 10 };
-
         legendaSelecionada.slice(1).forEach((texto) => {
             const legRow = worksheet.addRow([texto]);
             worksheet.mergeCells(legRow.number, 1, legRow.number, maxCol);
@@ -459,7 +467,6 @@ export const exportControleQualidadeToExcel = async ({
         const legendTitle = worksheet.addRow(["LEGENDA E OBSERVAÇÕES"]);
         worksheet.mergeCells(legendTitle.number, 1, legendTitle.number, maxCol);
         legendTitle.getCell(1).font = { bold: true, color: { argb: "FF1F2937" }, size: 10 };
-
         legendaSelecionada.forEach((texto) => {
             const legRow = worksheet.addRow([texto]);
             worksheet.mergeCells(legRow.number, 1, legRow.number, maxCol);
@@ -472,7 +479,13 @@ export const exportControleQualidadeToExcel = async ({
     worksheet.mergeCells(revTitleRow.number, 1, revTitleRow.number, maxCol);
     revTitleRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF1F2937" } };
 
-    const codeMap: any = { vidros: "PHU-035", pragas: "PHU-042", inusuais: "PHU-041", rejeitos: "PHU-034" };
+    const codeMap: any = {
+        vidros: "PHU-035",
+        pragas: "PHU-042",
+        inusuais: "PHU-041",
+        rejeitos: "PHU-034",
+        residuos: "PHU-027"
+    };
 
     const reviewInfo = [
         ["Aprovado/Revisador:", "Clebitania Carvalho"],

@@ -41,6 +41,8 @@ export default function CondutaHigienePage() {
         stats,
         lavagemLogs,
         setLavagemLogs,
+        lavagemHorarios,
+        setLavagemHorarios,
         updateLavagemRow,
         toggleLavagemCell,
         removeLavagemRow,
@@ -207,6 +209,8 @@ export default function CondutaHigienePage() {
                 {activeTab === "lavagem" && (
                     <LavagemMaos
                         weekDays={weekDays}
+                        lavagemHorarios={lavagemHorarios}
+                        setLavagemHorarios={setLavagemHorarios}
                         lavagemLogs={lavagemLogs}
                         setLavagemLogs={setLavagemLogs}
                         updateLavagemRow={updateLavagemRow}

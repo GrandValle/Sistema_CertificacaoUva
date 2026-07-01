@@ -33,7 +33,7 @@ export interface AreaPreenchimento {
     produtos: string[];
     category: CategoriaArea;
     isWeeklyType?: boolean;
-    instrucaoUso?: string; // Para áreas que, apesar de diárias, têm um tipo específico de frequência semanal
+    instrucaoUso?: string;
     isMatricial?: boolean;
 }
 
@@ -47,8 +47,56 @@ export interface CleaningLog {
     monitorSignature?: string | null;
 }
 
+// =======================================================
+// INTERFACE PARA BEBEDOUROS (PHU-017)
+// =======================================================
+export interface BebedouroLog {
+    id: number;
+    data: string;
+    local: string;
+    limpeza: string | null;
+    trocaFiltro: 'S' | 'N' | '';
+    manutencao: 'S' | 'N' | '';
+    observacao: string;
+    acaoCorretiva: string;
+    signature: string;
+}
+
+export const BEBEDOURO_ITENS = [
+    { id: 'limpeza', label: 'Limpeza do Bebedouro' },
+    { id: 'trocaFiltro', label: 'Troca do Filtro' },
+    { id: 'manutencao', label: 'Manutenção do Bebedouro' }
+];
+
+// =======================================================
+// INTERFACE PARA TESOURAS (CONTROLE SEMANAL)
+// =======================================================
+export interface RegistroHigienizacaoTesoura {
+    id: number;
+    dataInicio: string;
+    dataFim: string;
+    dias: {
+        [dia: string]: {
+            qtde: number | '';
+            status: 'C' | 'NC' | '';
+        };
+    };
+    respLimpeza: string | null;
+    monitorResponsavel: string | null;
+}
+
+export const DIAS_SEMANA_TESOURA = [
+    { id: "segunda", label: "Segunda" },
+    { id: "terca", label: "Terça" },
+    { id: "quarta", label: "Quarta" },
+    { id: "quinta", label: "Quinta" },
+    { id: "sexta", label: "Sexta" },
+    { id: "sabado", label: "Sábado" }
+];
+
 // === DADOS ORGANIZADOS E VERTICAIS ===
 export const AREAS_DATA: AreaPreenchimento[] = [
+    // ... (todas as áreas existentes)
     {
         id: 'panos',
         nome: 'Panos de Limpeza',
@@ -179,24 +227,6 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         category: 'Infraestrutura'
     },
     {
-        id: 'deposito_selo',
-        nome: 'Depósito Selo/Porão',
-        doc: 'PHU-014',
-        freq: 'Diaria',
-        campo2: 'Horário',
-        produtos: ['V', 'P', 'S'],
-        category: 'Infraestrutura'
-    },
-    {
-        id: 'controle_visitantes',
-        nome: 'Sala de Controle e Recepção de Visitantes',
-        doc: 'PHU-023',
-        freq: 'Diaria (uma vez ao dia)',
-        campo2: 'Horário',
-        produtos: ['AL', 'DN', 'HS', 'A70'],
-        category: 'Infraestrutura'
-    },
-    {
         id: 'colmeias_ventiladores',
         nome: 'Colmeias e Ventiladores',
         doc: 'PHU-016',
@@ -205,16 +235,6 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         campo2: 'Horário',
         produtos: ['PA', 'HS'],
         category: 'Equipamentos'
-    },
-    {
-        id: 'controle_qualidade',
-        nome: 'Sala de Controle de Qualidade',
-        doc: 'PHU-017',
-        freq: 'Diaria (em dias de processamento)',
-        tituloProdutos: 'Produtos Utilizados',
-        campo2: 'Horário',
-        produtos: ['AL', 'HS'],
-        category: 'Infraestrutura'
     },
     {
         id: 'paleteiras',
@@ -237,6 +257,17 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         category: 'Infraestrutura'
     },
     {
+        id: 'bebedouros',
+        nome: 'Bebedouro',
+        doc: 'PHU-017',
+        freq: 'Mensal',
+        campo2: 'Horário',
+        produtos: [],
+        category: 'Infraestrutura',
+        isMatricial: true, // Garante que a legenda padrão S/N apareça
+        instrucaoUso: 'Materiais Necessários:\n- Balde\n- Esponja\n- Luvas Nitrílicas\n- Bota PVC\n- Óculos\n| Diluição dos Produtos:\n1) 50 mL de detergente neutro para 10 litros de água\n2) 100 mL de hipoclorito de sódio para 10 litros de água',
+    },
+    {
         id: 'balde_lixo_lixeiras',
         nome: 'Baldes de Lixo e Lixeiras',
         doc: 'PHU-020',
@@ -244,16 +275,6 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         tituloProdutos: 'Produtos Utilizados',
         campo2: 'Horário',
         produtos: ['AL', 'HS'],
-        category: 'Limpeza Geral'
-    },
-    {
-        id: 'externa_calcadas',
-        nome: 'Área Externa e Calçadas',
-        doc: 'PHU-021',
-        freq: 'Quinzenal (a cada 15 dias)',
-        tituloProdutos: 'Produtos Utilizados',
-        campo2: 'Horário',
-        produtos: ['V', 'J', 'P', 'S'],
         category: 'Limpeza Geral'
     },
     {
@@ -322,9 +343,9 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         freq: 'Diaria (em dias de processamento)',
         tituloProdutos: 'Produtos Utilizados',
         campo2: 'Horário',
-        produtos: ['AL', 'DN', 'HS',],
+        produtos: ['AL', 'DN', 'HS'],
         category: 'Infraestrutura'
-    },
+    }
 ];
 
 // === CONSTANTES COMPLEMENTARES ===
@@ -340,7 +361,7 @@ export const PRODUTO_LEGENDA: Record<string, string> = {
     'DT': 'Detergente Banheiro',
     'A70': 'Álcool 70%',
     'Sanclor': 'Sanclor',
-    'J': 'Jato com água',
+    'J': 'Jato com água'
 };
 
 export const COMPLIANCE = {
@@ -355,7 +376,7 @@ export const CATEGORIES = [
     { id: "Quinzenais/Mensais", name: "Quinzenais/Mensais", color: "bg-purple-50 text-purple-700" },
     { id: "Equipamentos", name: "Equipamentos", color: "bg-amber-50 text-amber-700" },
     { id: "Limpeza Geral", name: "Limpeza Geral", color: "bg-cyan-50 text-cyan-700" },
-    { id: "Infraestrutura", name: "Infraestrutura", color: "bg-pink-50 text-pink-700" },
+    { id: "Infraestrutura", name: "Infraestrutura", color: "bg-pink-50 text-pink-700" }
 ];
 
 export const FREQUENCIES = [
@@ -363,7 +384,7 @@ export const FREQUENCIES = [
     { id: "Diaria", name: "Diária", color: "bg-green-50 text-green-700" },
     { id: "Semanal", name: "Semanal", color: "bg-yellow-50 text-yellow-700" },
     { id: "Quinzenal", name: "Quinzenal", color: "bg-blue-50 text-blue-700" },
-    { id: "Mensal", name: "Mensal", color: "bg-purple-50 text-purple-700" },
+    { id: "Mensal", name: "Mensal", color: "bg-purple-50 text-purple-700" }
 ];
 
 export const extractFrequencyType = (freq: string): string => {
@@ -375,30 +396,3 @@ export const extractFrequencyType = (freq: string): string => {
     if (upperFreq.includes('MENSAL')) return "Mensal";
     return "OUTRA";
 };
-
-// =======================================================
-// NOVAS INTERFACES PARA TESOURAS (CONTROLE SEMANAL)
-// =======================================================
-
-export interface RegistroHigienizacaoTesoura {
-    id: number;
-    dataInicio: string;      // YYYY-MM-DD
-    dataFim: string;         // YYYY-MM-DD
-    dias: {
-        [dia: string]: {      // dias: "segunda", "terca", ..., "sabado"
-            qtde: number | '';
-            status: 'C' | 'NC' | '';
-        };
-    };
-    respLimpeza: string | null;
-    monitorResponsavel: string | null;
-}
-
-export const DIAS_SEMANA_TESOURA = [
-    { id: "segunda", label: "Segunda" },
-    { id: "terca", label: "Terça" },
-    { id: "quarta", label: "Quarta" },
-    { id: "quinta", label: "Quinta" },
-    { id: "sexta", label: "Sexta" },
-    { id: "sabado", label: "Sábado" }
-];

@@ -1,10 +1,6 @@
 // src/services/relatorioService.ts
 import { PrismaClient } from '@prisma/client';
-import { PassThrough } from 'stream';
-
-// 🔹 (Opcional) Importa apenas o tipo Archiver para tipar a variável 'archive'
-//    Se preferir, pode deixar comentado e usar 'any' no lugar.
-// import type { Archiver } from 'archiver';
+import AdmZip from 'adm-zip';
 
 const prisma = new PrismaClient();
 
@@ -109,38 +105,27 @@ export const gerarZipRelatorios = async (inicio?: Date, fim?: Date, modulo?: str
         throw new Error(`Nenhum documento encontrado para ${modulo ? 'o módulo ' + modulo : 'o período selecionado'}.`);
     }
 
-    // 🔥 IMPORTAÇÃO DINÂMICA DO 'ARCHIVER' (ESM)
-    const archiverModule = await import('archiver');
-    // ✅ Correção: afirmamos explicitamente que o default é uma função
-    const archiver = archiverModule.default as (format: string, options?: any) => any;
+    // 🔥 Usando adm-zip para gerar o arquivo na memória
+    const zip = new AdmZip();
+    const usedNames: Record<string, number> = {};
 
-    return new Promise<Buffer>((resolve, reject) => {
-        const buffers: any[] = [];
-        const output = new PassThrough();
+    documentosFiltrados.forEach((doc) => {
+        let fileName = doc.nomeArquivo;
 
-        output.on('data', (data) => buffers.push(data));
-        output.on('end', () => resolve(Buffer.concat(buffers)));
+        // Evita nomes duplicados de arquivos dentro do ZIP
+        if (usedNames[fileName]) {
+            const parts = fileName.split('.');
+            const ext = parts.pop();
+            fileName = `${parts.join('.')}_${usedNames[fileName]}.${ext}`;
+            usedNames[doc.nomeArquivo]++;
+        } else {
+            usedNames[fileName] = 1;
+        }
 
-        // Agora o TypeScript não reclama, pois 'archiver' é tratado como função
-        const archive = archiver('zip', { zlib: { level: 9 } });
-        archive.pipe(output);
-
-        const usedNames: Record<string, number> = {};
-
-        documentosFiltrados.forEach((doc) => {
-            let fileName = doc.nomeArquivo;
-            if (usedNames[fileName]) {
-                const parts = fileName.split('.');
-                const ext = parts.pop();
-                fileName = `${parts.join('.')}_${usedNames[fileName]}.${ext}`;
-                usedNames[doc.nomeArquivo]++;
-            } else {
-                usedNames[fileName] = 1;
-            }
-            archive.append(doc.conteudo, { name: fileName });
-        });
-
-        archive.on('error', (err: any) => reject(err));
-        archive.finalize();
+        // Adiciona o arquivo diretamente na memória do ZIP
+        zip.addFile(fileName, doc.conteudo);
     });
+
+    // Retorna o Buffer pronto para ser enviado ao Controller e baixado pelo usuário
+    return zip.toBuffer();
 };

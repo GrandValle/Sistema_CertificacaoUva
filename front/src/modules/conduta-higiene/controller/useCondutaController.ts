@@ -29,6 +29,12 @@ interface CondutaPersistedData {
     checklist?: ChecklistRow[];
     actions?: ActionPlan[];
     lavagemLogs?: LavagemLog[];
+    lavagemHorarios?: {
+        [day: string]: {
+            manha: string;
+            tarde: string;
+        };
+    };
 }
 
 export function useCondutaController() {
@@ -79,6 +85,12 @@ export function useCondutaController() {
             return acc;
         }, {} as any);
 
+    const defaultLavagemHorarios = () =>
+        DAYS.reduce((acc, day) => {
+            acc[day] = { manha: "09:00", tarde: "14:00" };
+            return acc;
+        }, {} as Record<string, { manha: string; tarde: string }>);
+
     const defaultLavagemLogs: LavagemLog[] = [];
 
     // ==========================================
@@ -90,6 +102,7 @@ export function useCondutaController() {
     const [checklist, setChecklist] = useState<ChecklistRow[]>(defaultChecklist);
     const [actions, setActions] = useState<ActionPlan[]>(defaultActions);
     const [lavagemLogs, setLavagemLogs] = useState<LavagemLog[]>(defaultLavagemLogs);
+    const [lavagemHorarios, setLavagemHorarios] = useState<Record<string, { manha: string; tarde: string }>>(defaultLavagemHorarios());
     const [week, setWeek] = useState(getCurrentWeekString(new Date()));
     const [signatures, setSignatures] = useState({ coordinator: null as string | null });
     const [isInitialized, setIsInitialized] = useState(false);
@@ -188,6 +201,15 @@ export function useCondutaController() {
                 if (savedData.actions) setActions(savedData.actions);
                 if (savedData.lavagemLogs && savedData.lavagemLogs.length > 0)
                     setLavagemLogs(savedData.lavagemLogs);
+                if (savedData.lavagemHorarios) {
+                    const base = defaultLavagemHorarios();
+                    DAYS.forEach((day) => {
+                        const val = savedData.lavagemHorarios?.[day];
+                        if (val?.manha) base[day].manha = val.manha;
+                        if (val?.tarde) base[day].tarde = val.tarde;
+                    });
+                    setLavagemHorarios(base);
+                }
                 if (savedData.signatures) setSignatures(savedData.signatures);
             }
         } catch (error) {
@@ -205,8 +227,9 @@ export function useCondutaController() {
             checklist,
             actions,
             lavagemLogs,
+            lavagemHorarios,
         }));
-    }, [isInitialized, week, signatures, checklist, actions, lavagemLogs]);
+    }, [isInitialized, week, signatures, checklist, actions, lavagemLogs, lavagemHorarios]);
 
     // Agora o useEffect chama carregarColaboradores depois dela já existir
     useEffect(() => {
@@ -332,6 +355,7 @@ export function useCondutaController() {
                 checklist,
                 actions,
                 lavagemLogs,
+                lavagemHorarios,
                 colaboradores,
             });
 
@@ -349,7 +373,7 @@ export function useCondutaController() {
             if (activeTab === "inspecao") {
                 dadosConduta = { week, signatures, checklist, actions };
             } else {
-                dadosConduta = { week, lavagemLogs };
+                dadosConduta = { week, lavagemLogs, lavagemHorarios };
             }
 
             const dadosDoBanco = {
@@ -438,6 +462,8 @@ export function useCondutaController() {
         },
         lavagemLogs,
         setLavagemLogs,
+        lavagemHorarios,
+        setLavagemHorarios,
         addLavagemRow,
         updateLavagemRow,
         toggleLavagemCell,

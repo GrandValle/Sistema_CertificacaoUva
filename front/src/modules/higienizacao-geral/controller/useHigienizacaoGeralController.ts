@@ -1,24 +1,48 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { AREAS_DATA, CleaningLog, AreaPreenchimento, RegistroHigienizacaoTesoura, DIAS_SEMANA_TESOURA } from "../model/higienizacaoGeral";
+import { AREAS_DATA, CleaningLog, AreaPreenchimento, RegistroHigienizacaoTesoura, DIAS_SEMANA_TESOURA, BebedouroLog } from "../model/higienizacaoGeral";
 import { salvarDocumento } from "../../../services/api";
 import { STORAGE_KEYS } from "../../../constants/storageKeys";
 import { exportHigienizacaoToExcel } from "../services/excelFormatter";
 
 export type TabType = "panos" | string;
 
+const FIXED_BEBEDOURO_ROWS = 4;
+
 export function useHigienizacaoController() {
+    const createEmptyBebedouroRow = (id: number = Date.now()): BebedouroLog => ({
+        id,
+        data: '',
+        local: '',
+        limpeza: '',
+        trocaFiltro: '',
+        manutencao: '',
+        observacao: '',
+        acaoCorretiva: '',
+        signature: ''
+    });
+
+    const createFixedBebedouroRows = (rows?: BebedouroLog[]): BebedouroLog[] => {
+        const existingRows = rows ?? [];
+        const paddedRows = [...existingRows];
+
+        while (paddedRows.length < FIXED_BEBEDOURO_ROWS) {
+            paddedRows.push(createEmptyBebedouroRow(Date.now() + paddedRows.length));
+        }
+
+        return paddedRows;
+    };
+
     const [currentTab, setCurrentTab] = useState<string>("panos");
     const [modoOperacao, setModoOperacao] = useState<'campo' | 'packing'>('campo');
     const [selectedCategory, setSelectedCategory] = useState<string>("all");
     const [selectedFrequency, setSelectedFrequency] = useState<string>("all");
     const [searchTerm, setSearchTerm] = useState<string>("");
 
-    // 🟢 CORREÇÃO: Dicionário de observações separadas por aba
+    // Dicionário de observações separadas por aba
     const [observacoesByTab, setObservacoesByTab] = useState<Record<string, string>>({});
 
-    // 🟢 CORREÇÃO: Mantemos as variáveis originais para a interface não quebrar
     const observacaoNC = observacoesByTab[currentTab] || "";
     const setObservacaoNC = (texto: string) => {
         setObservacoesByTab(prev => ({ ...prev, [currentTab]: texto }));
@@ -29,9 +53,11 @@ export function useHigienizacaoController() {
         if (typeof window === "undefined") return {};
         try {
             const saved = localStorage.getItem(STORAGE_KEYS.higienizacao);
-            return saved ? JSON.parse(saved) : {};
+            const parsed = saved ? JSON.parse(saved) : {};
+            parsed.bebedouros = createFixedBebedouroRows(Array.isArray(parsed.bebedouros) ? parsed.bebedouros : undefined);
+            return parsed;
         } catch {
-            return {};
+            return { bebedouros: createFixedBebedouroRows() };
         }
     };
 
@@ -39,10 +65,7 @@ export function useHigienizacaoController() {
     const [isLoaded, setIsLoaded] = useState(false);
 
     useEffect(() => {
-        // Carrega as tabelas
         setLogsByTab(getSavedLogs());
-
-        // 🟢 CORREÇÃO: Carrega as observações salvas
         if (typeof window !== "undefined") {
             try {
                 const savedObs = localStorage.getItem(`${STORAGE_KEYS.higienizacao}_obs`);
@@ -53,7 +76,6 @@ export function useHigienizacaoController() {
                 console.error("Erro ao ler observações do storage", error);
             }
         }
-
         setIsLoaded(true);
     }, []);
 
@@ -62,9 +84,12 @@ export function useHigienizacaoController() {
 
     let currentLogs: CleaningLog[] = [];
     let tesourasLogs: RegistroHigienizacaoTesoura[] = [];
+    let bebedourosLogs: BebedouroLog[] = [];
 
     if (activeArea.id === 'tesouras') {
         tesourasLogs = logsByTab['tesouras'] || [];
+    } else if (activeArea.id === 'bebedouros') {
+        bebedourosLogs = logsByTab['bebedouros'] || [];
     } else {
         let logs = logsByTab[currentTab] || [];
         if (logs.length < 4) {
@@ -91,7 +116,7 @@ export function useHigienizacaoController() {
 
     // ========== CRUD PARA ÁREAS NORMAIS ==========
     const addRow = () => {
-        if (activeArea.id === 'tesouras') return;
+        if (activeArea.id === 'tesouras' || activeArea.id === 'bebedouros') return;
         const newRow: CleaningLog = {
             id: Date.now(),
             date: "",
@@ -104,14 +129,21 @@ export function useHigienizacaoController() {
         updateTabLogs([...currentLogs, newRow]);
     };
 
+    const removeRow = (index: number) => {
+        if (activeArea.id === 'tesouras' || activeArea.id === 'bebedouros') return;
+        if (currentLogs.length <= 1) return;
+        const updated = currentLogs.filter((_, i) => i !== index);
+        updateTabLogs(updated);
+    };
+
     const updateField = <K extends keyof CleaningLog>(index: number, field: K, value: CleaningLog[K]) => {
-        if (activeArea.id === 'tesouras') return;
+        if (activeArea.id === 'tesouras' || activeArea.id === 'bebedouros') return;
         const updated = currentLogs.map((log, i) => i === index ? { ...log, [field]: value } : log);
         updateTabLogs(updated);
     };
 
     const toggleCheck = (index: number, key: string) => {
-        if (activeArea.id === 'tesouras') return;
+        if (activeArea.id === 'tesouras' || activeArea.id === 'bebedouros') return;
         const updated = currentLogs.map((log, i) => {
             if (i === index) {
                 const safeChecks = log?.checks || {};
@@ -123,7 +155,7 @@ export function useHigienizacaoController() {
     };
 
     const setCheckValue = (index: number, key: string, value: string) => {
-        if (activeArea.id === 'tesouras') return;
+        if (activeArea.id === 'tesouras' || activeArea.id === 'bebedouros') return;
         const updated = currentLogs.map((log, i) => {
             if (i === index) {
                 const safeChecks = log?.checks || {};
@@ -190,12 +222,32 @@ export function useHigienizacaoController() {
         updateTabLogs(updated);
     };
 
+    // ========== FUNÇÕES ESPECÍFICAS PARA BEBEDOUROS ==========
+    const addBebedouroRow = () => {
+        if (activeArea.id !== 'bebedouros') return;
+        const updated = [...bebedourosLogs, createEmptyBebedouroRow(Date.now())];
+        setLogsByTab(prev => ({ ...prev, bebedouros: updated }));
+    };
+
+    const updateBebedouroField = <K extends keyof BebedouroLog>(id: number, field: K, value: BebedouroLog[K]) => {
+        if (activeArea.id !== 'bebedouros') return;
+        const updated = bebedourosLogs.map(log => log.id === id ? { ...log, [field]: value } : log);
+        setLogsByTab(prev => ({ ...prev, bebedouros: updated }));
+    };
+
+    const removeBebedouroRow = (id: number) => {
+        if (activeArea.id !== 'bebedouros') return;
+        if (bebedourosLogs.length <= 1) return;
+        const updated = bebedourosLogs.filter(log => log.id !== id);
+        setLogsByTab(prev => ({ ...prev, bebedouros: updated }));
+    };
+
     // ========== PERSISTÊNCIA (SALVAR NO LOCALSTORAGE) ==========
     useEffect(() => {
         if (Object.keys(logsByTab).length > 0) {
             const cleaned: Record<string, any> = {};
             for (const [tab, logs] of Object.entries(logsByTab)) {
-                if (tab === 'tesouras') {
+                if (tab === 'tesouras' || tab === 'bebedouros') {
                     cleaned[tab] = logs;
                     continue;
                 }
@@ -210,14 +262,12 @@ export function useHigienizacaoController() {
         }
     }, [logsByTab]);
 
-    // 🟢 CORREÇÃO: Salva as observações no storage sempre que elas mudarem
+    // Salva observações
     useEffect(() => {
         if (Object.keys(observacoesByTab).length > 0) {
             localStorage.setItem(`${STORAGE_KEYS.higienizacao}_obs`, JSON.stringify(observacoesByTab));
         }
     }, [observacoesByTab]);
-
-    // 🟢 REMOVIDO: O código que apagava o texto ao mudar de aba (o sabotador) foi deletado daqui!
 
     // ========== FILTROS ==========
     const filteredAreas = useMemo(() => {
@@ -267,11 +317,13 @@ export function useHigienizacaoController() {
             && (activeArea.produtos || []).every((produto) => Boolean(log.checks?.[produto]));
     };
 
+    // ========== EXPORTAÇÃO ==========
     const exportarExcel = async () => {
         try {
             console.log("Gerando arquivo Excel...");
             const now = new Date();
 
+            // Exportação para Tesouras
             if (activeArea.id === 'tesouras') {
                 const excelBlob = await exportHigienizacaoToExcel({
                     activeArea,
@@ -300,16 +352,52 @@ export function useHigienizacaoController() {
                 );
 
                 console.log("Salvo com ID:", resposta.id);
-
                 updateTabLogs([]);
-                setObservacaoNC(""); // 🟢 Agora vai limpar apenas a observação da aba de Tesouras
+                setObservacaoNC("");
                 window.dispatchEvent(new Event("storage"));
                 window.dispatchEvent(new Event("historicoAtualizado"));
-
                 alert("Planilha de Tesouras exportada e salva com sucesso!");
                 return;
             }
 
+            // Exportação para Bebedouros
+            if (activeArea.id === 'bebedouros') {
+                const excelBlob = await exportHigienizacaoToExcel({
+                    activeArea,
+                    currentLogs: [],
+                    modoOperacao,
+                    observacaoGeral: observacaoNC,
+                    bebedourosLogs: bebedourosLogs
+                });
+
+                const dadosDoBanco = {
+                    popCode: "PHU-017",
+                    titulo: "Higienização dos Bebedouros",
+                    setor: activeArea.nome,
+                    mes: now.toISOString().slice(0, 7),
+                    ano: now.getFullYear(),
+                    frequencia: selectedFrequency,
+                    registrosDiarios: [],
+                    status: "completo"
+                };
+
+                const resposta = await salvarDocumento(
+                    "higienizacao_geral",
+                    dadosDoBanco,
+                    excelBlob as Blob,
+                    `Higienizacao_Bebedouros_${now.toISOString().split("T")[0]}.xlsx`
+                );
+
+                console.log("Salvo com ID:", resposta.id);
+                setLogsByTab(prev => ({ ...prev, bebedouros: createFixedBebedouroRows() }));
+                setObservacaoNC("");
+                window.dispatchEvent(new Event("storage"));
+                window.dispatchEvent(new Event("historicoAtualizado"));
+                alert("Planilha de Bebedouros exportada e salva com sucesso!");
+                return;
+            }
+
+            // Áreas normais (Panos, etc.)
             const logsPreenchidos = currentLogs.filter(log => isLogStarted(log));
             const todosCompletos = logsPreenchidos.length > 0 && logsPreenchidos.every(log => isLogComplete(log));
             const statusCalculado = todosCompletos ? "completo" : "incompleto";
@@ -353,7 +441,7 @@ export function useHigienizacaoController() {
             const newEmptyLogs = Array.from({ length: 4 }).map((_, idx) => ({ ...emptyRow, id: -(idx + 1) }));
 
             updateTabLogs(newEmptyLogs);
-            setObservacaoNC(""); // 🟢 Agora vai limpar apenas a observação da aba exportada
+            setObservacaoNC("");
             window.dispatchEvent(new Event("storage"));
             window.dispatchEvent(new Event("historicoAtualizado"));
             alert("Planilha exportada e salva no Banco de Dados com sucesso!");
@@ -371,8 +459,10 @@ export function useHigienizacaoController() {
         activeArea,
         currentLogs,
         tesourasLogs,
+        bebedourosLogs,   // 🔥 NOVO
         filteredAreas,
         addRow,
+        removeRow,
         updateField,
         toggleCheck,
         setCheckValue,
@@ -380,6 +470,9 @@ export function useHigienizacaoController() {
         updateTesouraWeek,
         updateTesouraDia,
         removeTesouraWeek,
+        addBebedouroRow,
+        updateBebedouroField, // 🔥 NOVO
+        removeBebedouroRow,
         modoOperacao, setModoOperacao,
         exportarExcel,
         observacaoNC, setObservacaoNC

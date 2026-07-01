@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { BiHistory, BiSearchAlt, BiBug, BiError, BiRecycle } from "react-icons/bi"; // BiRecycle para rejeitos
+import { BiHistory, BiSearchAlt, BiBug, BiError, BiRecycle, BiTrash } from "react-icons/bi"; // Adicionado BiTrash para Resíduos
 import { useControleQualidadeController } from "../controller/useControleQualidadeController";
 import { AbaVidros } from "./AbaVidros";
 import { AbaPragas } from "./AbaPragas";
 import { AbaInusuais } from "./AbaInusuais";
-import { AbaRejeitos } from "./AbaRejeitos"; // NOVO COMPONENTE
+import { AbaRejeitos } from "./AbaRejeitos";
+import { AbaResiduos } from "./AbaResiduos"; // IMPORT DA NOVA ABA
 
 export function ControleQualidadePage() {
     const controller = useControleQualidadeController();
@@ -16,6 +17,7 @@ export function ControleQualidadePage() {
         if (activeTab === "vidros") return { code: "PHU-035", name: "Monitoramento de Vidro e Plástico Rígido" };
         if (activeTab === "pragas") return { code: "PHU-042", name: "Controle Integrado de Vetores e Pragas Urbanas" };
         if (activeTab === "rejeitos") return { code: "PHU-034", name: "Produtos Retidos e Rejeitos" };
+        if (activeTab === "residuos") return { code: "PHU-045", name: "Controle de Resíduos" }; // 🔥 NOVO DOCUMENTO
         return { code: "PHU-041", name: "Acontecimentos Inusuais e Ações Corretivas" };
     };
 
@@ -23,7 +25,7 @@ export function ControleQualidadePage() {
 
     return (
         <div className="min-h-screen bg-gray-50 p-4 sm:p-6 font-sans text-gray-800 flex justify-center">
-            <div className="w-full max-w-7xl flex flex-col gap-4"> {/* Ajustei max-w-350 que era inválido no tailwind, para max-w-7xl para ter largura total */}
+            <div className="w-full max-w-7xl flex flex-col gap-4">
 
                 <div className="bg-[#1a1c23] text-white rounded-xl shadow-lg p-6 flex flex-col sm:flex-row justify-between items-center gap-4">
                     <div className="text-center sm:text-left">
@@ -40,7 +42,7 @@ export function ControleQualidadePage() {
                     </div>
                 </div>
 
-                {/* MENU DE ABAS COM 4 OPÇÕES */}
+                {/* MENU DE ABAS COM 5 OPÇÕES */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-2 flex items-center overflow-x-auto hide-scrollbar">
 
                     <button onClick={() => setActiveTab("vidros")} className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === "vidros" ? "text-cyan-600 bg-cyan-50 border border-cyan-100 shadow-sm scale-[1.02]" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"}`}>
@@ -55,9 +57,15 @@ export function ControleQualidadePage() {
 
                     <div className="w-px h-8 bg-gray-300 mx-1 shrink-0 rounded-full"></div>
 
-                    {/* NOVA ABA: REJEITOS */}
                     <button onClick={() => setActiveTab("rejeitos")} className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === "rejeitos" ? "text-blue-600 bg-blue-50 border border-blue-100 shadow-sm scale-[1.02]" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"}`}>
                         <BiRecycle size={18} /> Produtos Retidos
+                    </button>
+
+                    <div className="w-px h-8 bg-gray-300 mx-1 shrink-0 rounded-full"></div>
+
+                    {/* 🔥 NOVA ABA: RESÍDUOS */}
+                    <button onClick={() => setActiveTab("residuos")} className={`flex-1 flex justify-center items-center gap-2 px-4 py-3 text-sm font-bold rounded-lg transition-all whitespace-nowrap ${activeTab === "residuos" ? "text-emerald-600 bg-emerald-50 border border-emerald-100 shadow-sm scale-[1.02]" : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"}`}>
+                        <BiTrash size={18} /> Resíduos
                     </button>
 
                     <div className="w-px h-8 bg-gray-300 mx-1 shrink-0 rounded-full"></div>
@@ -73,21 +81,27 @@ export function ControleQualidadePage() {
                         {activeTab === "vidros" && <AbaVidros controller={controller} />}
                         {activeTab === "pragas" && <AbaPragas controller={controller} />}
                         {activeTab === "inusuais" && <AbaInusuais controller={controller} />}
-
-                        {/* RENDERIZA O NOVO COMPONENTE */}
                         {activeTab === "rejeitos" && <AbaRejeitos controller={controller} />}
+
+                        {/* 🔥 RENDERIZA O NOVO COMPONENTE DE RESÍDUOS */}
+                        {activeTab === "residuos" && (
+                            <AbaResiduos
+                                residuosLogs={controller.residuosLogs}
+                                addResiduoLog={controller.addResiduoLog}
+                                updateResiduoLog={controller.updateResiduoLog}
+                                removeResiduoLog={controller.removeResiduoLog}
+                            />
+                        )}
                     </div>
 
                     <div className="p-4 sm:p-6 bg-gray-50 border-t border-gray-200 flex justify-end">
-                        {/* Temporariamente desativado para não limpar a tela após exportar */}
                         <button
                             type="button"
-                            onClick={exportarExcel} // ou controller.exportarExcel (depende de como você importou o hook aí em cima)
+                            onClick={exportarExcel}
                             className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 px-5 py-2.5 rounded-xl font-bold transition-all shadow-md active:scale-95 text-sm"
                         >
                             Exportar para Excel
                         </button>
-
                     </div>
                 </div>
 
