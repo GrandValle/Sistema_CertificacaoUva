@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState, useMemo } from "react";
 import { BiSearch, BiDownload, BiTrash, BiArchive } from "react-icons/bi";
 
 interface HistoricColumn {
     key: string;
     label: string;
-    render?: (value: any) => React.ReactNode;
+    render?: (value: any, record?: any) => React.ReactNode;
 }
 
 interface FilterOption {
@@ -25,7 +25,6 @@ interface HistoricTableProps {
     searchPlaceholder?: string;
     monthFilter?: boolean;
     customFilter?: FilterOption;
-    // 🟢 NOVA PROP ADICIONADA:
     onExportBatch?: () => void;
 }
 
@@ -39,70 +38,72 @@ export function HistoricTable({
     searchPlaceholder = "Buscar...",
     monthFilter = true,
     customFilter,
-    onExportBatch, // 🟢 RECEBENDO A FUNÇÃO AQUI
+    onExportBatch,
 }: HistoricTableProps) {
     const [search, setSearch] = useState("");
-    const [selectedMonth, setSelectedMonth] = useState(() => new Date().toISOString().slice(0, 7));
+
+    // 🟢 CORRIGIDO: Pega o mês local do usuário no formato YYYY-MM
+    const [selectedMonth, setSelectedMonth] = useState(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
+
     const [selectedCustom, setSelectedCustom] = useState<string>("");
-    const [isMounted, setIsMounted] = useState(false);
 
-    useEffect(() => {
-        setIsMounted(true);
-    }, []);
+    // 🔥 O SEGREDO DA VELOCIDADE ESTÁ AQUI: useMemo
+    const filteredData = useMemo(() => {
+        const normalizeFilterValue = (value: unknown) =>
+            String(value ?? "")
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .toLowerCase()
+                .trim();
 
-    const normalizeFilterValue = (value: unknown) =>
-        String(value ?? "")
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .toLowerCase()
-            .trim();
+        return data.filter((item) => {
+            // 1. Filtro de Busca por Texto
+            const searchMatch = search === "" || Object.values(item).some((val) =>
+                val && typeof val !== "object" && String(val).toLowerCase().includes(search.toLowerCase())
+            );
 
-    if (!isMounted) return null;
-
-    const filteredData = data.filter((item) => {
-        // 1. Filtro de Busca por Texto
-        const searchMatch = search === "" || Object.values(item).some((val) =>
-            val && typeof val !== "object" && String(val).toLowerCase().includes(search.toLowerCase())
-        );
-
-        // 2. Filtro de Mês Inteligente
-        let monthMatch = false;
-        if (!monthFilter || !selectedMonth) {
-            monthMatch = true;
-        } else {
-            const [year, month] = selectedMonth.split("-");
-            const brDateStr = `${month}/${year}`;
-
-            if (item.mes && String(item.mes).includes(selectedMonth)) {
+            // 2. Filtro de Mês Inteligente
+            let monthMatch = false;
+            if (!monthFilter || !selectedMonth) {
                 monthMatch = true;
-            }
-            else if (item.exportedAt && (String(item.exportedAt).includes(selectedMonth) || String(item.exportedAt).includes(brDateStr))) {
-                monthMatch = true;
-            }
-            else if (item.id && !isNaN(Number(item.id))) {
-                const dateFromId = new Date(Number(item.id));
-                if (dateFromId.getFullYear() === Number(year) && (dateFromId.getMonth() + 1) === Number(month)) {
+            } else {
+                const [year, month] = selectedMonth.split("-");
+                const brDateStr = `${month}/${year}`;
+
+                if (item.mes && String(item.mes).includes(selectedMonth)) {
                     monthMatch = true;
                 }
+                else if (item.exportedAt && (String(item.exportedAt).includes(selectedMonth) || String(item.exportedAt).includes(brDateStr))) {
+                    monthMatch = true;
+                }
+                else if (item.id && !isNaN(Number(item.id))) {
+                    const dateFromId = new Date(Number(item.id));
+                    if (dateFromId.getFullYear() === Number(year) && (dateFromId.getMonth() + 1) === Number(month)) {
+                        monthMatch = true;
+                    }
+                }
             }
-        }
 
-        // 3. Filtro Customizado (Abas/Áreas)
-        const customMatch = (() => {
-            if (!customFilter || !selectedCustom) return true;
+            // 3. Filtro Customizado (Abas/Áreas)
+            const customMatch = (() => {
+                if (!customFilter || !selectedCustom) return true;
 
-            const itemValue = normalizeFilterValue(item[customFilter.key]);
-            const selectedValue = normalizeFilterValue(selectedCustom);
+                const itemValue = normalizeFilterValue(item[customFilter.key]);
+                const selectedValue = normalizeFilterValue(selectedCustom);
 
-            return (
-                itemValue === selectedValue ||
-                itemValue.includes(selectedValue) ||
-                selectedValue.includes(itemValue)
-            );
-        })();
+                return (
+                    itemValue === selectedValue ||
+                    itemValue.includes(selectedValue) ||
+                    selectedValue.includes(itemValue)
+                );
+            })();
 
-        return searchMatch && monthMatch && customMatch;
-    });
+            return searchMatch && monthMatch && customMatch;
+        });
+    }, [data, search, selectedMonth, monthFilter, customFilter, selectedCustom]); // <- Só roda se algo mudar!
 
     return (
         <div className="space-y-6">
@@ -218,7 +219,7 @@ export function HistoricTable({
                                                 key={col.key}
                                                 className="px-5 py-4 text-slate-800 font-medium border-r border-slate-100 last:border-0"
                                             >
-                                                {col.render ? col.render(row[col.key]) : row[col.key] || "-"}
+                                                {col.render ? col.render(row[col.key], row) : row[col.key] || "-"}
                                             </td>
                                         ))}
                                         <td className="px-5 py-3 text-center">

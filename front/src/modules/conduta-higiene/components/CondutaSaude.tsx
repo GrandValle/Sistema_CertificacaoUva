@@ -1,13 +1,14 @@
 "use client";
 
-import React from "react";
+import { useState, useEffect } from "react";
 import { SignatureSelector } from "../../../components/SignatureSelector";
 import {
     BiTrash,
     BiPlus,
     BiCalendar,
 } from "react-icons/bi";
-import { QUESTIONS, DAYS, ActionPlan } from "../model/condutaModel";
+// 🔥 isInverseQuestion importado do model
+import { QUESTIONS, DAYS, ActionPlan, isInverseQuestion } from "../model/condutaModel";
 
 interface CondutaSaudeProps {
     week: string;
@@ -18,7 +19,6 @@ interface CondutaSaudeProps {
     toggleStatus: (rowIndex: number, day: string) => void;
     actions: any[];
     addActionRow: () => void;
-    // 🔥 CORREÇÃO: usar keyof ActionPlan para compatibilidade com o controller
     updateAction: (index: number, field: keyof ActionPlan, value: string) => void;
     removeActionRow: (id: number) => void;
     showStats: boolean;
@@ -27,6 +27,8 @@ interface CondutaSaudeProps {
     setShowActionPlan: (v: boolean) => void;
     stats: any;
     docInfo: any;
+    observacoes: Record<string, string>;
+    updateObservacao: (day: string, value: string) => void;
 }
 
 export default function CondutaSaude({
@@ -46,9 +48,23 @@ export default function CondutaSaude({
     setShowActionPlan,
     stats,
     docInfo,
+    observacoes,
+    updateObservacao,
 }: CondutaSaudeProps) {
+    // 🔥 Proteção contra erro de Hydration do Next.js
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
+    if (!isMounted) {
+        return null;
+    }
+
     return (
         <div className="space-y-6 animate-fade-in">
+            {/* ESTATÍSTICAS */}
             {showStats && (
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="bg-white rounded-2xl shadow-lg p-5 border border-gray-200">
@@ -157,55 +173,94 @@ export default function CondutaSaude({
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {checklist.map((row, index) => (
-                                <tr
-                                    key={row.questionId}
-                                    className="hover:bg-gray-50 transition-colors"
-                                >
-                                    <td className="py-3 px-4 text-center font-bold text-gray-700 sticky left-0 bg-white z-10 border-r border-gray-200">
-                                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center mx-auto text-indigo-800">
-                                            {String(row.questionId).padStart(2, "0")}
-                                        </div>
-                                    </td>
-                                    <td className="py-3 px-4 text-gray-700 text-sm font-medium leading-relaxed border-r border-gray-200">
-                                        {QUESTIONS[index]}
-                                    </td>
-                                    {DAYS.map((day) => {
-                                        //@ts-ignore
-                                        const status = row[day];
-                                        return (
-                                            <td
-                                                key={day}
-                                                onClick={() => toggleStatus(index, day)}
-                                                className="py-3 px-2 text-center border-r border-gray-200"
-                                            >
-                                                <div
-                                                    className={`w-12 h-12 mx-auto rounded-lg flex items-center justify-center cursor-pointer transition-all ${status === "ok"
-                                                            ? "bg-green-100 border-2 border-green-500 text-green-800"
-                                                            : status === "no"
-                                                                ? "bg-red-100 border-2 border-red-500 text-red-800"
-                                                                : "bg-gray-50 border-2 border-gray-200 text-gray-400"
-                                                        }`}
+                            {checklist.map((row, index) => {
+                                // 🔥 CHECAGEM SE A PERGUNTA É INVERTIDA
+                                const questionText = QUESTIONS[index] || "";
+                                const isInverse = isInverseQuestion(questionText);
+
+                                return (
+                                    <tr
+                                        key={row.questionId}
+                                        className="hover:bg-gray-50 transition-colors"
+                                    >
+                                        <td className="py-3 px-4 text-center font-bold text-gray-700 sticky left-0 bg-white z-10 border-r border-gray-200">
+                                            <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center mx-auto text-indigo-800">
+                                                {String(row.questionId).padStart(2, "0")}
+                                            </div>
+                                        </td>
+                                        <td className="py-3 px-4 text-gray-700 text-sm font-medium leading-relaxed border-r border-gray-200">
+                                            {questionText}
+                                        </td>
+                                        {DAYS.map((day) => {
+                                            //@ts-ignore
+                                            const status = row[day];
+
+                                            // 🔥 APLICAÇÃO INTELIGENTE DAS CORES
+                                            let colorClasses = "bg-gray-50 border-2 border-gray-200 text-gray-400"; // Padrão
+
+                                            if (status === "ok") { // SIM
+                                                if (isInverse) {
+                                                    colorClasses = "bg-red-100 border-2 border-red-500 text-red-800"; // SIM invertido = Vermelho
+                                                } else {
+                                                    colorClasses = "bg-green-100 border-2 border-green-500 text-green-800"; // SIM normal = Verde
+                                                }
+                                            } else if (status === "no") { // NÃO
+                                                if (isInverse) {
+                                                    colorClasses = "bg-green-100 border-2 border-green-500 text-green-800"; // NÃO invertido = Verde
+                                                } else {
+                                                    colorClasses = "bg-red-100 border-2 border-red-500 text-red-800"; // NÃO normal = Vermelho
+                                                }
+                                            }
+
+                                            return (
+                                                <td
+                                                    key={day}
+                                                    onClick={() => toggleStatus(index, day)}
+                                                    className="py-3 px-2 text-center border-r border-gray-200"
                                                 >
-                                                    <span className="font-bold text-sm">
-                                                        {status === "ok"
-                                                            ? "SIM"
-                                                            : status === "no"
-                                                                ? "NÃO"
-                                                                : "—"}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                        );
-                                    })}
-                                </tr>
-                            ))}
+                                                    <div
+                                                        className={`w-12 h-12 mx-auto rounded-lg flex items-center justify-center cursor-pointer transition-all ${colorClasses}`}
+                                                    >
+                                                        <span className="font-bold text-sm">
+                                                            {status === "ok"
+                                                                ? "SIM"
+                                                                : status === "no"
+                                                                    ? "NÃO"
+                                                                    : "—"}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                            );
+                                        })}
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            {/* PLANO DE AÇÃO (SEM STATUS) */}
+            {/* OBSERVAÇÕES GERAIS */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
+                <div className="p-5 bg-linear-to-r from-amber-50 to-orange-50 border-b border-amber-200">
+                    <h3 className="text-sm font-black text-amber-800 flex items-center gap-2">
+                        📝 Observações Gerais
+                    </h3>
+                    <p className="text-xs text-amber-600 mt-1">
+                        Registre observações adicionais sobre a semana de monitoramento.
+                    </p>
+                </div>
+                <div className="p-5">
+                    <textarea
+                        value={observacoes["geral"] || ''}
+                        onChange={(e) => updateObservacao("geral", e.target.value)}
+                        placeholder="Digite suas observações aqui..."
+                        className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm outline-none focus:border-amber-400 !bg-white !text-slate-900 min-h-24 resize-y"
+                    />
+                </div>
+            </div>
+
+            {/* PLANO DE AÇÃO */}
             <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
                 <div className="p-5 bg-linear-to-r from-indigo-50 to-purple-50 border-b border-indigo-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
@@ -242,7 +297,6 @@ export default function CondutaSaude({
                                     <th className="py-4 px-4 min-w-50">Causa Raiz</th>
                                     <th className="py-4 px-4 min-w-50">Ação Corretiva</th>
                                     <th className="py-4 px-4 min-w-50">Responsável</th>
-                                    {/* 🔥 REMOVIDA a coluna Status */}
                                     <th className="py-4 px-4 w-12"></th>
                                 </tr>
                             </thead>

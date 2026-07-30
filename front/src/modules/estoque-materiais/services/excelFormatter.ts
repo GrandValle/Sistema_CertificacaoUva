@@ -1,7 +1,8 @@
+/* eslint-disable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 "use client";
 
 import * as ExcelJS from "exceljs";
-import { TabType, EstoqueLog, RegistroTesoura, RegistroOculos, EmbalagemEntry, DIAS_SEMANA, LEGENDA_OCULOS, LEGENDA_TESOURAS, LEGENDA_ESTOQUE } from "../model/estoqueModel";
+import { TabType, EstoqueLog, DIAS_SEMANA, LEGENDA_ESTOQUE, LEGENDA_OCULOS, LEGENDA_TESOURAS, LEGENDA_LIMPEZA } from "../model/estoqueModel";
 
 // --- HELPERS GERAIS ---
 const formatName = (str: string) => {
@@ -9,8 +10,6 @@ const formatName = (str: string) => {
     if (str.startsWith("data:image")) return "[ASSINATURA DIGITAL]";
     return str.replace(/_/g, " ").toUpperCase();
 };
-
-const normalizeFileName = (str: string) => (!str ? "" : str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_").toLowerCase());
 
 const formatSafeDate = (dateStr: string) => {
     if (!dateStr) return "";
@@ -41,21 +40,36 @@ const applyHeaderStyle = (cell: ExcelJS.Cell) => {
     cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
 };
 
-const applyDataStyle = (cell: ExcelJS.Cell, isCenter = true) => {
+const applyDataStyle = (cell: ExcelJS.Cell, isCenter = true, wrap = true) => {
     cell.border = { top: { style: "thin", color: { argb: "FFD1D5DB" } }, left: { style: "thin", color: { argb: "FFD1D5DB" } }, bottom: { style: "thin", color: { argb: "FFD1D5DB" } }, right: { style: "thin", color: { argb: "FFD1D5DB" } } };
-    cell.alignment = { horizontal: isCenter ? "center" : "left", vertical: "middle", wrapText: true };
+    cell.alignment = { horizontal: isCenter ? "center" : "left", vertical: "middle", wrapText: wrap };
+};
+
+const applyStatusColor = (cell: ExcelJS.Cell) => {
+    if (cell.value === "SIM") {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6F4EA" } };
+        cell.font = { bold: true, color: { argb: "FF137333" } };
+    } else if (cell.value === "NÃO") {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFCE8E6" } };
+        cell.font = { bold: true, color: { argb: "FFC5221F" } };
+    } else if (cell.value === "F") {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+        cell.font = { bold: true, color: { argb: "FFB91C1C" } };
+    }
 };
 
 interface ExportEstoqueParams {
     activeTab: TabType;
     estoqueLogs: EstoqueLog[];
-    tesourasLogs: RegistroTesoura[];
-    oculosLogs: RegistroOculos[];
-    embalagemLogs: EmbalagemEntry[];
+    tesourasLogs: any[];
+    oculosLogs: any[];
+    cleaningLogs?: any[];
     dataInicio: string;
     dataFim: string;
     frequenciaTesoura: string;
     colaboradoresOculos: any[];
+    statusMap?: Record<string, any>;
+    observacaoGeral?: string;
 }
 
 export const exportEstoqueToExcel = async ({
@@ -63,26 +77,28 @@ export const exportEstoqueToExcel = async ({
     estoqueLogs,
     tesourasLogs,
     oculosLogs,
-    embalagemLogs,
+    cleaningLogs = [],
     dataInicio,
     dataFim,
     frequenciaTesoura,
-    colaboradoresOculos
+    colaboradoresOculos,
+    statusMap = {},
+    observacaoGeral = ""
 }: ExportEstoqueParams) => {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(
         activeTab === "estoque" ? "Estoque" :
             activeTab === "tesouras" ? "Tesouras" :
-                activeTab === "embalagem" ? "Embalagem" : "Óculos"
+                activeTab === "limpeza" ? "Limpeza" : "Óculos"
     );
     const baseUrl = window.location.origin;
 
     // --- 1. CONFIGURAÇÃO DE PÁGINA E COLUNAS ---
     const isTesouras = activeTab === "tesouras";
-    const isEmbalagem = activeTab === "embalagem";
+    const isLimpeza = activeTab === "limpeza";
     worksheet.pageSetup = {
         paperSize: 9,
-        orientation: (isTesouras || isEmbalagem) ? "landscape" : "portrait",
+        orientation: (isTesouras || isLimpeza) ? "landscape" : "portrait",
         fitToPage: true,
         fitToWidth: 1,
         fitToHeight: 0,
@@ -92,57 +108,38 @@ export const exportEstoqueToExcel = async ({
     let title = "", codigoDoc = "", headers: string[] = [], metaExtra: string[] = [];
     let colWidths: number[] = [];
 
-    // Variável para controlar se a coluna de observação dos óculos vai existir
-    let hasObservacaoOculos = false;
-
     if (activeTab === "estoque") {
         title = "CONTROLE DE ESTOQUE - MATERIAL DE LIMPEZA"; codigoDoc = "PHU-029";
-        headers = ["Data", "Produto", "Entrada", "Saída", "Setor", "Quem Pegou", "Saldo", "Responsável"];
-        colWidths = [14, 24, 14, 14, 18, 28, 14, 28];
+        // 🟢 Saldo realocado para antes do Setor
+        headers = ["Data", "Produto", "Entrada", "Saída", "Saldo", "Setor", "Quem Pegou", "Responsável"];
+        colWidths = [14, 24, 14, 14, 14, 18, 40, 40];
     } else if (activeTab === "tesouras") {
         title = "ENTREGA E DEVOLUÇÃO DE TESOURAS"; codigoDoc = "PHU-043";
-        headers = ["Contrato", "Funcionário", "Nº Tesoura", ...DIAS_SEMANA];
+        headers = ["Contrato", "Funcionário", "Nº Tesoura", ...DIAS_SEMANA, "Observação"];
         metaExtra = [`Data início: ${formatSafeDate(dataInicio) || "-"}`, `Data fim: ${formatSafeDate(dataFim) || "-"}`, `Frequência: ${frequenciaTesoura || "-"}`];
-        colWidths = [16, 26, 12, ...DIAS_SEMANA.map(() => 10)];
-    } else if (activeTab === "embalagem") {
-        title = "CONTROLE DE ENTRADA DE MATERIAL DE EMBALAGEM (PHU-032)"; codigoDoc = "PHU-032";
-        const hasObservacao = embalagemLogs.some(log => log.observacoes && log.observacoes.trim() !== "");
-        const hasAcao = embalagemLogs.some(log => log.acoesCorretivas && log.acoesCorretivas.trim() !== "");
-        const baseHeaders = [
-            "Data", "Hora Chegada", "Responsável", "Tipo Transporte", "Tipo Material",
-            "Limpeza do Veículo", "Conservação du Material", "Estado do Transporte",
-            "Odores no Transporte", "Problema de Acondicionamento", "Estado do Material",
-            "Material Danificado?", "Material Limpo?", "Com Odores?"
-        ];
-        headers = [...baseHeaders];
-        if (hasObservacao) headers.push("Observações Adicionais");
-        if (hasAcao) headers.push("Ações Corretivas");
-        const widths = {
-            data: 14, hora: 12, responsavel: 30, tipoTransp: 20, tipoMat: 20,
-            cond: 18, simNao: 14, obs: 40, acao: 40
-        };
-        colWidths = [
-            widths.data, widths.hora, widths.responsavel, widths.tipoTransp, widths.tipoMat,
-            widths.cond, widths.cond, widths.cond, widths.cond, widths.cond, widths.cond,
-            widths.simNao, widths.simNao, widths.simNao
-        ];
-        if (hasObservacao) colWidths.push(widths.obs);
-        if (hasAcao) colWidths.push(widths.acao);
+        colWidths = [16, 50, 12, ...DIAS_SEMANA.map(() => 10), 60];
+    } else if (activeTab === "limpeza") {
+        title = "RECEBIMENTO DE MATERIAL DE LIMPEZA"; codigoDoc = "PHU-036";
+        headers = ["Data", "Produto", "Produto Correto", "Composição OK", "Embalagem OK", "Padrão Exigido", "Cumpre Pedido", "Responsável"];
+        colWidths = [18, 30, 16, 16, 16, 16, 16, 35];
+        metaExtra = [`Produto: ${cleaningLogs[0]?.product || "Todos"}`];
     } else {
-        // 🔥 ÓCULOS: Configuração dinâmica da Observação
         title = "CONTROLE DE ÓCULOS"; codigoDoc = "PHU-027";
+        metaExtra = [`Data início: ${formatSafeDate(dataInicio) || "-"}`, `Data fim: ${formatSafeDate(dataFim) || "-"}`];
+        const hasObservacao = (oculosLogs || []).some(log => Object.values(log.incidentes || {}).some((inc: any) => inc?.observacao?.trim() !== ""));
+        const hasStatusObs = statusMap && Object.values(statusMap).some((item: any) =>
+            item.obsList && item.obsList.some((obs: any) => obs.texto && obs.texto.trim() !== "")
+        );
 
-        // Verifica se ALGUÉM tem observação preenchida
-        hasObservacaoOculos = (oculosLogs || []).some(log => log.observacao && log.observacao.trim() !== "");
-
-        headers = ["Data", "Colaborador", "Intacto", "Assinatura"];
-        colWidths = [14, 26, 12, 28];
-
-        // Só adiciona a coluna se existir alguma observação
-        if (hasObservacaoOculos) {
-            headers.push("Observação");
-            colWidths.push(30);
-        }
+        const baseHeaders = ["Colaborador", ...DIAS_SEMANA];
+        if (hasObservacao) baseHeaders.push("Observação e Ação Corretiva");
+        if (hasStatusObs) baseHeaders.push("Registros de Observação");
+        baseHeaders.push("Assinatura");
+        headers = baseHeaders;
+        colWidths = [40, ...DIAS_SEMANA.map(() => 10)];
+        if (hasObservacao) colWidths.push(40);
+        if (hasStatusObs) colWidths.push(40);
+        colWidths.push(45);
     }
 
     const maxCol = headers.length;
@@ -162,14 +159,22 @@ export const exportEstoqueToExcel = async ({
     worksheet.mergeCells(titleRow.number, 1, titleRow.number, maxCol);
     titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
 
-    const metadataRows = [`Exportado em: ${new Date().toLocaleString("pt-BR")}`];
-    if (metaExtra.length) metadataRows.push(...metaExtra);
+    // 🟢 Linha da Data de Exportação Removida
+    const metadataRows = [...metaExtra];
 
     metadataRows.forEach(meta => {
         const row = worksheet.addRow([meta]);
         worksheet.mergeCells(row.number, 1, row.number, maxCol);
         row.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
     });
+
+    if (activeTab === "oculos") {
+        worksheet.addRow([]);
+        const subtitleRow = worksheet.addRow(["Estado dos óculos – verificação diária"]);
+        worksheet.mergeCells(subtitleRow.number, 1, subtitleRow.number, maxCol);
+        subtitleRow.getCell(1).font = { bold: true, size: 11, color: { argb: "FF1E3A8A" } };
+        subtitleRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+    }
 
     worksheet.addRow([]);
 
@@ -178,38 +183,95 @@ export const exportEstoqueToExcel = async ({
     headerRow.height = 24;
     headerRow.eachCell(applyHeaderStyle);
 
-    // --- FUNÇÃO DE ASSINATURA ---
-    const addTableSignature = async (val: string | null, rNum: number, cNum: number, cell: ExcelJS.Cell) => {
+    // --- FUNÇÃO DE ASSINATURA CORRIGIDA ---
+    const addTableSignature = async (val: string | null, rNum: number, cNum: number, cell: ExcelJS.Cell, rowHeight: number = 65) => {
         if (!val) return;
         const imgFile = val.startsWith("data:image") ? { base64: val.split(",")[1], ext: "png" } : await fetchSignatureImage(val);
-        cell.value = formatName(val);
-        cell.font = { size: 8, bold: true, color: { argb: "FF003366" } };
+        const nomeFormatado = formatName(val);
+
+        cell.value = `\n\n${nomeFormatado}`;
+
+        const nameLength = nomeFormatado.length;
+        const fontSize = nameLength > 30 ? 7 : (nameLength > 20 ? 8 : 9);
+
+        cell.font = { size: fontSize, bold: true, color: { argb: "FF003366" } };
         cell.alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
+
         if (imgFile) {
-            const imgId = workbook.addImage(val.startsWith("data:image") ? { base64: (imgFile as any).base64, extension: "png" } : { buffer: (imgFile as any).buffer, extension: (imgFile as any).ext });
-            worksheet.addImage(imgId, { tl: { col: cNum - 1 + 0.1, row: rNum - 1 + 0.1 }, ext: { width: 100, height: 35 }, editAs: "oneCell" });
-            cell.value = `\n\n\n${formatName(val)}`;
+            const imgWidth = 120;
+            const imgHeight = 35;
+            worksheet.addImage(workbook.addImage(val.startsWith("data:image") ? { base64: (imgFile as any).base64, extension: "png" } : { buffer: (imgFile as any).buffer, extension: (imgFile as any).ext }), {
+                tl: { col: cNum - 1 + 0.15, row: rNum - 1 + 0.08 },
+                ext: { width: imgWidth, height: imgHeight },
+                editAs: "oneCell"
+            });
         }
     };
 
     // --- 5. PREENCHIMENTO DOS DADOS ---
     if (activeTab === "estoque") {
-        const filled = estoqueLogs.filter(log => !!log.product?.trim() || !!log.date?.trim());
+        // 🔥 Filtra apenas se houve Entrada ou Saída preenchida
+        const filled = estoqueLogs.filter(log => {
+            const hasProduct = !!log.product?.trim();
+            const hasEntry = !!log.entry && String(log.entry).trim() !== "" && String(log.entry).trim() !== "0";
+            const hasExit = !!log.exit && String(log.exit).trim() !== "" && String(log.exit).trim() !== "0";
+            return hasProduct && (hasEntry || hasExit);
+        });
+
         for (const log of filled) {
+            // 🟢 Dados preenchidos de acordo com a nova ordem: Data, Produto, Entrada, Saída, Saldo, Setor, QuemPegou, Responsável
             const row = worksheet.addRow([
-                formatSafeDate(log.date), log.product || "",
+                formatSafeDate(log.date),
+                log.product || "",
                 log.entry ? `${log.entry} ${log.entryUnit || ""}`.trim() : "",
                 log.exit ? `${log.exit} ${log.exitUnit || ""}`.trim() : "",
-                log.sector || "", "", log.balance ?? "", ""
+                log.balance ?? "", // Saldo agora na coluna 5
+                log.sector || "",  // Setor agora na coluna 6
+                "",                // Quem Pegou (col 7)
+                ""                 // Responsável (col 8)
             ]);
-            row.eachCell((c, i) => applyDataStyle(c, i !== 2 && i !== 5));
-            await addTableSignature(log.whoTook, row.number, 6, row.getCell(6));
-            await addTableSignature(log.responsible, row.number, 8, row.getCell(8));
+
+            row.height = 65;
+            row.eachCell((c, i) => {
+                // Ajustados os índices das colunas de acordo com a nova ordem: 
+                // Col 7 (Quem Pegou) e Col 8 (Responsável)
+                if (i === 7 || i === 8) {
+                    applyDataStyle(c, false, true);
+                } else {
+                    // Col 2 (Produto) e Col 6 (Setor) não são centralizados (isCenter = false)
+                    applyDataStyle(c, i !== 2 && i !== 6, true);
+                }
+            });
+            // 🟢 Ajustados os índices das assinaturas para as colunas 7 e 8
+            await addTableSignature(log.whoTook, row.number, 7, row.getCell(7), 65);
+            await addTableSignature(log.responsible, row.number, 8, row.getCell(8), 65);
         }
     } else if (activeTab === "tesouras") {
-        const ordemTipo: Record<string, number> = { 'EFETIVO': 1, 'CONTRATADO': 2, 'DESLIGADO': 3 };
+        let currentStatusMap = statusMap || {};
+        if (Object.keys(currentStatusMap).length === 0 && typeof window !== "undefined") {
+            const saved = localStorage.getItem('status_tesouras');
+            if (saved) {
+                try { currentStatusMap = JSON.parse(saved); } catch (e) { }
+            }
+        }
+
+        const ordemTipo: Record<string, number> = { 'EFETIVO': 1, 'CONTRATADO': 2, 'DESLIGADO': 3, 'DESLIGADA': 3 };
+
         const registrosOrdenados = [...tesourasLogs]
-            .filter(row => !!row.funcionario?.trim())
+            .filter(row => {
+                if (row.visivel === false) return false;
+                if (!row.funcionario?.trim()) return false;
+
+                const localStatus = currentStatusMap[row.id];
+                const status = localStatus?.status || 'NORMAL';
+
+                const hasMarks = DIAS_SEMANA.some(dia => {
+                    const diaObj = row.dias?.[dia];
+                    return diaObj?.e || diaObj?.d || diaObj?.f;
+                });
+
+                return status === 'NORMAL' || hasMarks;
+            })
             .sort((a, b) => {
                 const tipoA = ordemTipo[a.tipo] || 4;
                 const tipoB = ordemTipo[b.tipo] || 4;
@@ -218,104 +280,216 @@ export const exportEstoqueToExcel = async ({
             });
 
         registrosOrdenados.forEach(row => {
-            const rowData = [row.tipo, row.funcionario, row.numeroTesoura];
+            const isDevolvida = row.statusTesoura === 'DEVOLVIDA' || row.tipo === 'DESLIGADO' || row.tipo === 'DESLIGADA';
+            const numeroExibido = isDevolvida ? "DEVOLVIDA" : row.numeroTesoura;
+
+            const rowData = [row.tipo, row.funcionario, numeroExibido];
+
             DIAS_SEMANA.forEach(dia => {
-                const e = row.dias?.[dia]?.e ? "E" : "";
-                const d = row.dias?.[dia]?.d ? "D" : "";
-                rowData.push([e, d].filter(Boolean).join("/"));
+                const diaObj = row.dias?.[dia];
+                if (diaObj?.f) {
+                    rowData.push("F");
+                } else {
+                    const e = diaObj?.e ? "E" : "";
+                    const d = diaObj?.d ? "D" : "";
+                    const valorDia = [e, d].filter(Boolean).join("/");
+                    rowData.push(valorDia || "-");
+                }
             });
+
+            const localStatus = currentStatusMap[row.id];
+            let valorFinal = "-";
+
+            if (localStatus) {
+                let obsList = localStatus.obsList || [];
+                if (obsList.length === 0 && localStatus.obs && localStatus.obs.trim() !== '') {
+                    obsList = [{ texto: localStatus.obs }];
+                }
+                const textos = obsList
+                    .map((o: any) => o.texto?.trim())
+                    .filter((t: string) => t && t !== '');
+                if (textos.length > 0) {
+                    valorFinal = textos.join(" | ");
+                }
+            }
+
+            rowData.push(valorFinal);
+
             const dataRow = worksheet.addRow(rowData);
-            dataRow.height = 24;
-            dataRow.eachCell((c, i) => applyDataStyle(c, i !== 1 && i !== 2));
+            dataRow.height = 30;
+            dataRow.eachCell((c, i) => {
+                if (i === 2) {
+                    applyDataStyle(c, false, false);
+                } else {
+                    applyDataStyle(c, i !== 1 && i !== 2, true);
+                }
+                applyStatusColor(c);
+            });
 
             const contratoCell = dataRow.getCell(1);
+            const isDesligado = row.tipo === 'DESLIGADO' || row.tipo === 'DESLIGADA';
+
             if (row.tipo === 'EFETIVO') {
                 contratoCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDCFCE7" } };
                 contratoCell.font = { bold: true, color: { argb: "FF166534" } };
             } else if (row.tipo === 'CONTRATADO') {
                 contratoCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF9C3" } };
                 contratoCell.font = { bold: true, color: { argb: "FF854D0E" } };
-            } else if (row.tipo === 'DESLIGADO') {
-                contratoCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
-                contratoCell.font = { bold: true, color: { argb: "FF4B5563" } };
+            } else if (isDesligado) {
                 dataRow.eachCell(cell => {
                     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
                 });
+                contratoCell.font = { bold: true, color: { argb: "FF4B5563" } };
             }
         });
-    } else if (activeTab === "embalagem") {
-        const filled = embalagemLogs.filter(log => !!log.data?.trim() || !!log.responsavel?.trim());
-        const hasObservacao = filled.some(log => log.observacoes && log.observacoes.trim() !== "");
-        const hasAcao = filled.some(log => log.acoesCorretivas && log.acoesCorretivas.trim() !== "");
+
+        if (observacaoGeral && observacaoGeral.trim() !== "") {
+            worksheet.addRow([]);
+            worksheet.addRow([]);
+            const obsTitleRow = worksheet.addRow(["OBSERVAÇÕES GERAIS DA SEMANA"]);
+            worksheet.mergeCells(obsTitleRow.number, 1, obsTitleRow.number, maxCol);
+            obsTitleRow.getCell(1).font = { bold: true, size: 11, color: { argb: "FF1E3A8A" } };
+            obsTitleRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+            obsTitleRow.height = 20;
+
+            const obsContentRow = worksheet.addRow([observacaoGeral]);
+            worksheet.mergeCells(obsContentRow.number, 1, obsContentRow.number, maxCol);
+            obsContentRow.getCell(1).font = { size: 10, color: { argb: "FF333333" } };
+            obsContentRow.getCell(1).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+            const linhas = observacaoGeral.split('\n').length;
+            obsContentRow.height = 30 + 15 * (linhas - 1) || 30;
+        }
+
+    } else if (activeTab === "limpeza") {
+        // 🔥 Filtra apenas se houver preenchimento real nos status da inspeção
+        const filled = cleaningLogs.filter((log: any) => {
+            const hasProduct = !!log.product?.trim();
+            const hasChecks = !!log.produtoCorreto || !!log.composicaoOk || !!log.embalagemOk || !!log.padraoExigido || !!log.cumprePedido;
+            return hasProduct && hasChecks;
+        });
+
         for (const log of filled) {
-            const rowData: any[] = [
-                formatSafeDate(log.data),
-                log.horaChegada || "",
-                log.responsavel || "",
-                log.tipoTransporte || "",
-                log.tipoMaterial || "",
-                log.limpeza || "",
-                log.conservacao || "",
-                log.estadoTransporte || "",
-                log.odoresTransporte || "",
-                log.problemaAcondicionamento || "",
-                log.estadoMaterial || "",
-                log.materialDanificado ? "SIM" : "NÃO",
-                log.materialLimpo ? "SIM" : "NÃO",
-                log.comOdores ? "SIM" : "NÃO"
-            ];
-            if (hasObservacao) rowData.push(log.observacoes || "");
-            if (hasAcao) rowData.push(log.acoesCorretivas || "");
-            const row = worksheet.addRow(rowData);
-            row.eachCell((c, i) => applyDataStyle(c, true));
-            if (log.responsavel) {
-                await addTableSignature(log.responsavel, row.number, 3, row.getCell(3));
-            }
+            const row = worksheet.addRow([
+                log.date ? log.date.split('-').reverse().join('/') : "",
+                log.product || "",
+                log.produtoCorreto ? log.produtoCorreto.toUpperCase() : "",
+                log.composicaoOk ? log.composicaoOk.toUpperCase() : "",
+                log.embalagemOk ? log.embalagemOk.toUpperCase() : "",
+                log.padraoExigido ? log.padraoExigido.toUpperCase() : "",
+                log.cumprePedido ? log.cumprePedido.toUpperCase() : "",
+                ""
+            ]);
+            row.height = 65;
+            row.eachCell((c, i) => {
+                applyDataStyle(c, i !== 2 && i !== 8, true);
+                if (i >= 3 && i <= 7) {
+                    applyStatusColor(c);
+                }
+            });
+            await addTableSignature(log.responsavel, row.number, 8, row.getCell(8), 65);
         }
     } else {
-        // 🔥 ÓCULOS – Com Observação Dinâmica e Erro TypeScript Corrigido
-        const colaboradoresMap = new Map(
-            (colaboradoresOculos || []).map(c => [c.id, c.nome])
-        );
+        // ABA ÓCULOS
+        const colaboradoresParaExportar = (colaboradoresOculos || []).filter(c => {
+            const status = statusMap?.[c.id]?.status || 'NORMAL';
+            const log = (oculosLogs || []).find(l => String(l.colaboradorId) === String(c.id));
+            const hasMarks = log ? ["SEG", "TER", "QUA", "QUI", "SEX", "SAB"].some(dia => log.dias?.[dia] !== null && log.dias?.[dia] !== undefined && log.dias?.[dia] !== "") : false;
 
-        const filled = (oculosLogs || []).filter(log => {
-            const nome = colaboradoresMap.get(log.colaboradorId) || "";
-            return nome.trim() !== "" || !!log.data?.trim();
+            return status === 'NORMAL' || hasMarks;
         });
 
-        for (const log of filled) {
-            // Conversão segura para o TypeScript não reclamar
-            let intactoTexto = "";
-            const valorIntacto = String(log.intacto).toUpperCase();
+        const colaboradoresMap = new Map(colaboradoresParaExportar.map(c => [c.id, { nome: c.nome, status: c.status }]));
 
-            if (valorIntacto === "TRUE" || valorIntacto === "SIM") {
-                intactoTexto = "SIM";
-            } else if (valorIntacto === "FALSE" || valorIntacto === "NÃO" || valorIntacto === "NAO") {
-                intactoTexto = "NÃO";
+        const hasObservacao = (oculosLogs || []).some(log => Object.values(log.incidentes || {}).some((inc: any) => inc?.observacao?.trim() !== ""));
+        const hasStatusObs = colaboradoresParaExportar.some(c => {
+            const item = statusMap?.[c.id];
+            return item?.obsList?.some((obs: any) => obs.texto && obs.texto.trim() !== "");
+        });
+        const colaboradoresOrdenados = [...colaboradoresMap.keys()].sort((a, b) => {
+            const infoA = colaboradoresMap.get(a)!;
+            const infoB = colaboradoresMap.get(b)!;
+            if (infoA.status === "INATIVO" && infoB.status !== "INATIVO") return 1;
+            if (infoA.status !== "INATIVO" && infoB.status === "INATIVO") return -1;
+            return infoA.nome.localeCompare(infoB.nome);
+        });
+
+        for (const colabId of colaboradoresOrdenados) {
+            const info = colaboradoresMap.get(colabId)!;
+            const log = (oculosLogs || []).find(l => String(l.colaboradorId) === String(colabId));
+            const rowData: any[] = [info.nome];
+
+            for (const dia of DIAS_SEMANA) {
+                const status = log?.dias?.[dia];
+                if (status === "F") {
+                    rowData.push("F");
+                } else {
+                    rowData.push(status === true ? "SIM" : status === false ? "NÃO" : "");
+                }
             }
 
-            const nomeColaborador = colaboradoresMap.get(log.colaboradorId) || "";
-
-            // Monta a linha base
-            const rowData: any[] = [
-                formatSafeDate(log.data),
-                nomeColaborador,
-                intactoTexto,
-                "" // Espaço para a assinatura
-            ];
-
-            // Só adiciona a observação na linha se a coluna existir
-            if (hasObservacaoOculos) {
-                rowData.push(log.observacao || "");
+            if (hasObservacao) {
+                rowData.push(DIAS_SEMANA.filter(dia => log?.incidentes?.[dia]?.observacao?.trim()).map(dia => `${dia}: ${log!.incidentes![dia].observacao}`).join("; "));
             }
+
+            if (hasStatusObs) {
+                const statusData = statusMap?.[colabId];
+                let obsText = "";
+                if (statusData?.obsList) {
+                    const textos = statusData.obsList
+                        .map((o: any) => o.texto?.trim())
+                        .filter((t: string) => t && t !== '');
+                    if (textos.length > 0) {
+                        obsText = textos.join(" | ");
+                    }
+                }
+                rowData.push(obsText);
+            }
+
+            rowData.push(log?.assinaturaSemanal || "");
 
             const row = worksheet.addRow(rowData);
+            row.height = 65;
 
-            // i !== 2 (Colaborador fica alinhado à esquerda)
-            // i !== 5 (Observação fica alinhada à esquerda, se existir)
-            row.eachCell((c, i) => applyDataStyle(c, i !== 2 && i !== 5));
+            const assinaturaColIndex = rowData.length;
+            const nomeColIndex = 1;
 
-            await addTableSignature(log.assinatura, row.number, 4, row.getCell(4));
+            row.eachCell((cell, colIndex) => {
+                const isNameCol = colIndex === nomeColIndex;
+                const isAssinaturaCol = colIndex === assinaturaColIndex;
+                if (isNameCol || isAssinaturaCol) {
+                    applyDataStyle(cell, false, true);
+                } else {
+                    applyDataStyle(cell, colIndex !== 1, true);
+                }
+
+                applyStatusColor(cell);
+
+                if (info.status === "INATIVO") {
+                    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF3F4F6" } };
+                    cell.font = { ...cell.font, color: { argb: "FF6B7280" } };
+                }
+            });
+
+            if (log?.assinaturaSemanal) {
+                await addTableSignature(log.assinaturaSemanal, row.number, assinaturaColIndex, row.getCell(assinaturaColIndex), 65);
+            }
+        }
+
+        if (observacaoGeral && observacaoGeral.trim() !== "") {
+            worksheet.addRow([]);
+            worksheet.addRow([]);
+            const obsTitleRow = worksheet.addRow(["OBSERVAÇÕES GERAIS DA SEMANA"]);
+            worksheet.mergeCells(obsTitleRow.number, 1, obsTitleRow.number, maxCol);
+            obsTitleRow.getCell(1).font = { bold: true, size: 11, color: { argb: "FF1E3A8A" } };
+            obsTitleRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+            obsTitleRow.height = 20;
+
+            const obsContentRow = worksheet.addRow([observacaoGeral]);
+            worksheet.mergeCells(obsContentRow.number, 1, obsContentRow.number, maxCol);
+            obsContentRow.getCell(1).font = { size: 10, color: { argb: "FF333333" } };
+            obsContentRow.getCell(1).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+            const linhas = observacaoGeral.split('\n').length;
+            obsContentRow.height = 30 + 15 * (linhas - 1) || 30;
         }
     }
 
@@ -330,16 +504,11 @@ export const exportEstoqueToExcel = async ({
 
     let legendLines: string[] = [];
     if (activeTab === "estoque") legendLines = LEGENDA_ESTOQUE;
-    else if (activeTab === "tesouras") legendLines = LEGENDA_TESOURAS;
-    else if (activeTab === "embalagem") {
-        legendLines = [
-            "✓ Bom: Item em perfeitas condições.",
-            "● Aceitável: Item com pequenas avarias, mas dentro do aceitável.",
-            "✗ Reprovado: Item com problemas que requerem ação corretiva.",
-            "SIM / NÃO: Para as verificações complementares (Material Danificado, Limpo, Com Odores).",
-            "Observações Adicionais e Ações Corretivas: Preencher sempre que houver não conformidade."
-        ];
-    } else legendLines = LEGENDA_OCULOS;
+    else if (activeTab === "tesouras") legendLines = [...LEGENDA_TESOURAS, "F: Falta no dia"];
+    else if (activeTab === "limpeza") legendLines = LEGENDA_LIMPEZA;
+    else {
+        legendLines = [...LEGENDA_OCULOS, "Fundo cinza: Colaborador desligado (não está mais trabalhando na empresa).", "F: Falta no dia"];
+    }
 
     legendLines.forEach(line => {
         const row = worksheet.addRow([line]);
@@ -356,12 +525,7 @@ export const exportEstoqueToExcel = async ({
     revTitleRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF1F2937" } };
     revTitleRow.height = 18;
 
-    const reviewInfo = [
-        ["Aprovação / Revisado por:", "Clebitânia Carvalho"],
-        ["Data da Última Revisão:", "02/01/2026"],
-        ["Código do Documento:", codigoDoc]
-    ];
-    for (const [label, value] of reviewInfo) {
+    [["Aprovação / Revisado por:", "Clebitânia Carvalho"], ["Data da Última Revisão:", "02/01/2026"], ["Código do Documento:", codigoDoc]].forEach(([label, value]) => {
         const row = worksheet.addRow([label, value]);
         worksheet.mergeCells(row.number, 2, row.number, maxCol);
         row.getCell(1).font = { bold: true, size: 9, color: { argb: "FF374151" } };
@@ -369,8 +533,14 @@ export const exportEstoqueToExcel = async ({
         row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
         row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
         row.height = 16;
-    }
+    });
 
     const buffer = await workbook.xlsx.writeBuffer();
+
+    if (activeTab === "tesouras" && typeof window !== "undefined") {
+        localStorage.removeItem('status_tesouras');
+        window.dispatchEvent(new Event('limpar_status_tesouras'));
+    }
+
     return new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 };

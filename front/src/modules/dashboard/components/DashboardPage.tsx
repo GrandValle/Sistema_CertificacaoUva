@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
     FaDroplet,
@@ -13,6 +13,7 @@ import {
     FaIndustry,
     FaRegCalendar,
     FaDatabase,
+    FaFileLines,
 } from "react-icons/fa6";
 import { ShieldCheck, Stethoscope } from "lucide-react";
 import { useDashboardController } from "@/modules/dashboard/controller/useDashboardController";
@@ -28,6 +29,7 @@ const IconMap: Record<string, React.ElementType> = {
     "shield-check": ShieldCheck,
     stethoscope: Stethoscope,
     database: FaDatabase,
+    "file-text": FaFileLines,
 };
 
 export function DashboardPage() {
@@ -42,13 +44,7 @@ export function DashboardPage() {
     const totalSystems = systems.length;
     const activeSystems = systems.length;
 
-    // Estado para armazenar a data atual (apenas no cliente)
-    const [currentDate, setCurrentDate] = useState<string>("");
-
-    useEffect(() => {
-        // Define a data apenas no cliente, após a montagem
-        setCurrentDate(new Date().toLocaleDateString("pt-BR"));
-    }, []);
+    const [currentDate] = useState<string>(() => new Date().toLocaleDateString("pt-BR"));
 
     return (
         <div className="min-h-screen bg-linear-to-br from-slate-100 to-slate-200 p-4 md:p-8 font-sans">
@@ -86,7 +82,8 @@ export function DashboardPage() {
                 </header>
 
                 {/* FILTROS */}
-                <div className="flex items-center sm:justify-center gap-2 mb-12 overflow-x-auto hide-scrollbar w-full px-2 py-2">
+                {/* FILTROS */}
+                <div className="flex items-center gap-2 mb-12 overflow-x-auto hide-scrollbar w-full px-6 py-2 xl:justify-center scroll-smooth">
                     {systemCategories.map((cat) => {
                         const isSelected = selectedCategory === cat.id;
 
@@ -135,6 +132,9 @@ export function DashboardPage() {
                             </button>
                         );
                     })}
+
+                    {/* Elemento invisível para garantir a margem na direita quando o usuário arrastar até o final */}
+                    <div className="shrink-0 w-2 xl:hidden"></div>
                 </div>
 
                 {/* Grid de sistemas */}

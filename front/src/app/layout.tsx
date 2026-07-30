@@ -14,8 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-    title: "Sistema Certificações-Uva",
+    title: "Sistema Certificação-Uva",
     description: "GrandValle Certifications",
+    icons: {
+        icon: "/navegador.png",
+    },
 };
 
 export default function RootLayout({

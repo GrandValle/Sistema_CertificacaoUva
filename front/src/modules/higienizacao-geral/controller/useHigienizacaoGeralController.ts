@@ -5,6 +5,7 @@ import { AREAS_DATA, CleaningLog, AreaPreenchimento, RegistroHigienizacaoTesoura
 import { salvarDocumento } from "../../../services/api";
 import { STORAGE_KEYS } from "../../../constants/storageKeys";
 import { exportHigienizacaoToExcel } from "../services/excelFormatter";
+import { getHojeLocal } from "../../../utils/date"; // 🟢 IMPORT DA NOSSA FERRAMENTA
 
 export type TabType = "panos" | string;
 
@@ -40,14 +41,6 @@ export function useHigienizacaoController() {
     const [selectedFrequency, setSelectedFrequency] = useState<string>("all");
     const [searchTerm, setSearchTerm] = useState<string>("");
 
-    // Dicionário de observações separadas por aba
-    const [observacoesByTab, setObservacoesByTab] = useState<Record<string, string>>({});
-
-    const observacaoNC = observacoesByTab[currentTab] || "";
-    const setObservacaoNC = (texto: string) => {
-        setObservacoesByTab(prev => ({ ...prev, [currentTab]: texto }));
-    };
-
     // ========== CARREGAR DADOS DO LOCALSTORAGE (UNIFICADO) ==========
     const getSavedLogs = (): Record<string, any> => {
         if (typeof window === "undefined") return {};
@@ -61,23 +54,29 @@ export function useHigienizacaoController() {
         }
     };
 
-    const [logsByTab, setLogsByTab] = useState<Record<string, any>>({});
-    const [isLoaded, setIsLoaded] = useState(false);
+    // 🔥 CORREÇÃO: Inicialização lazy para logsByTab
+    const [logsByTab, setLogsByTab] = useState<Record<string, any>>(() => getSavedLogs());
 
-    useEffect(() => {
-        setLogsByTab(getSavedLogs());
+    // 🔥 CORREÇÃO: Inicialização lazy para observacoesByTab
+    const [observacoesByTab, setObservacoesByTab] = useState<Record<string, string>>(() => {
         if (typeof window !== "undefined") {
             try {
                 const savedObs = localStorage.getItem(`${STORAGE_KEYS.higienizacao}_obs`);
-                if (savedObs) {
-                    setObservacoesByTab(JSON.parse(savedObs));
-                }
+                return savedObs ? JSON.parse(savedObs) : {};
             } catch (error) {
                 console.error("Erro ao ler observações do storage", error);
+                return {};
             }
         }
-        setIsLoaded(true);
-    }, []);
+        return {};
+    });
+
+    // REMOVIDO: useEffect que carregava os dados (agora na inicialização)
+
+    const observacaoNC = observacoesByTab[currentTab] || "";
+    const setObservacaoNC = (texto: string) => {
+        setObservacoesByTab(prev => ({ ...prev, [currentTab]: texto }));
+    };
 
     // ========== DADOS DA ÁREA ATUAL ==========
     const activeArea = AREAS_DATA.find((a: AreaPreenchimento) => a.id === currentTab) || AREAS_DATA[0];
@@ -177,10 +176,13 @@ export function useHigienizacaoController() {
         const fimSemana = new Date(inicioSemana);
         fimSemana.setDate(inicioSemana.getDate() + 5);
 
+        // 🟢 CORREÇÃO: Função nativa para formatar Data ignorando UTC bug
+        const formataDataLocal = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
         const newWeek: RegistroHigienizacaoTesoura = {
             id: Date.now(),
-            dataInicio: inicioSemana.toISOString().split('T')[0],
-            dataFim: fimSemana.toISOString().split('T')[0],
+            dataInicio: formataDataLocal(inicioSemana), // 🟢 CORRIGIDO
+            dataFim: formataDataLocal(fimSemana),       // 🟢 CORRIGIDO
             dias: {},
             respLimpeza: null,
             monitorResponsavel: null
@@ -322,6 +324,8 @@ export function useHigienizacaoController() {
         try {
             console.log("Gerando arquivo Excel...");
             const now = new Date();
+            const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; // 🟢 CORRIGIDO
+            const hojeData = getHojeLocal(); // 🟢 CORRIGIDO
 
             // Exportação para Tesouras
             if (activeArea.id === 'tesouras') {
@@ -337,7 +341,7 @@ export function useHigienizacaoController() {
                     popCode: "PHU-024",
                     titulo: "Higienização Geral - Tesouras",
                     setor: activeArea.nome,
-                    mes: now.toISOString().slice(0, 7),
+                    mes: mesAtual, // 🟢 CORRIGIDO
                     ano: now.getFullYear(),
                     frequencia: selectedFrequency,
                     registrosDiarios: [],
@@ -348,7 +352,7 @@ export function useHigienizacaoController() {
                     "higienizacao_geral",
                     dadosDoBanco,
                     excelBlob as Blob,
-                    `Higienizacao_Tesouras_${now.toISOString().split("T")[0]}.xlsx`
+                    `Higienizacao_Tesouras_${hojeData}.xlsx` // 🟢 CORRIGIDO
                 );
 
                 console.log("Salvo com ID:", resposta.id);
@@ -374,7 +378,7 @@ export function useHigienizacaoController() {
                     popCode: "PHU-017",
                     titulo: "Higienização dos Bebedouros",
                     setor: activeArea.nome,
-                    mes: now.toISOString().slice(0, 7),
+                    mes: mesAtual, // 🟢 CORRIGIDO
                     ano: now.getFullYear(),
                     frequencia: selectedFrequency,
                     registrosDiarios: [],
@@ -385,7 +389,7 @@ export function useHigienizacaoController() {
                     "higienizacao_geral",
                     dadosDoBanco,
                     excelBlob as Blob,
-                    `Higienizacao_Bebedouros_${now.toISOString().split("T")[0]}.xlsx`
+                    `Higienizacao_Bebedouros_${hojeData}.xlsx` // 🟢 CORRIGIDO
                 );
 
                 console.log("Salvo com ID:", resposta.id);
@@ -413,7 +417,7 @@ export function useHigienizacaoController() {
                 popCode: "PHU-039",
                 titulo: "Higienização Geral",
                 setor: activeArea.nome,
-                mes: now.toISOString().slice(0, 7),
+                mes: mesAtual, // 🟢 CORRIGIDO
                 ano: now.getFullYear(),
                 frequencia: selectedFrequency,
                 registrosDiarios: currentLogs,
@@ -424,7 +428,7 @@ export function useHigienizacaoController() {
                 "higienizacao_geral",
                 dadosDoBanco,
                 excelBlob as Blob,
-                `Higienizacao_${activeArea.id}_${now.toISOString().split("T")[0]}.xlsx`
+                `Higienizacao_${activeArea.id}_${hojeData}.xlsx` // 🟢 CORRIGIDO
             );
 
             console.log("Salvo com ID:", resposta.id);
@@ -459,7 +463,7 @@ export function useHigienizacaoController() {
         activeArea,
         currentLogs,
         tesourasLogs,
-        bebedourosLogs,   // 🔥 NOVO
+        bebedourosLogs,
         filteredAreas,
         addRow,
         removeRow,
@@ -471,7 +475,7 @@ export function useHigienizacaoController() {
         updateTesouraDia,
         removeTesouraWeek,
         addBebedouroRow,
-        updateBebedouroField, // 🔥 NOVO
+        updateBebedouroField,
         removeBebedouroRow,
         modoOperacao, setModoOperacao,
         exportarExcel,

@@ -4,7 +4,8 @@ import * as ExcelJS from "exceljs";
 import {
     ManutencaoTabType, RegistroBalanca, RegistroReparo, InspecaoChecklist,
     FrequenciaAfericao, ITENS_SEMANAL_PHU040, ITENS_MENSAL_PHU040,
-    LEGENDA_CHECKLIST, LEGENDA_REPAROS, LEGENDA_BALANCAS, COMPLIANCE_MANUTENCAO
+    LEGENDA_CHECKLIST_SEMANAL, LEGENDA_CHECKLIST_MENSAL,
+    LEGENDA_REPAROS, LEGENDA_BALANCAS, COMPLIANCE_MANUTENCAO
 } from "../model/manutencaoModel";
 
 // 🟢 FUNÇÃO SEGURA PARA DATAS
@@ -17,18 +18,16 @@ const formatSafeDate = (dateStr: string) => {
     return dateStr;
 };
 
-// --- HELPERS GERAIS E IMAGEM (CORRIGIDO) ---
+// --- HELPERS GERAIS E IMAGEM ---
 const formatName = (str: string) => {
     if (!str) return "";
     if (str.startsWith("data:image")) return "[ASSINATURA DIGITAL]";
     return str.replace(/_/g, " ").toUpperCase();
 };
 
-// 🟢 CORREÇÃO: Usar encodeURIComponent com o nome original (como no projeto manga)
 const fetchSignatureImage = async (baseName: string) => {
     if (!baseName) return null;
     const baseUrl = window.location.origin;
-    // Tenta com encodeURIComponent (espaços → %20)
     const urlEncoded = `/assinaturas/${encodeURIComponent(baseName)}.png`;
     try {
         const res = await fetch(urlEncoded);
@@ -38,7 +37,6 @@ const fetchSignatureImage = async (baseName: string) => {
             return { buffer, ext: 'png' as const };
         }
     } catch (e) { }
-    // Fallback: tenta com o nome original (sem codificação)
     try {
         const res = await fetch(`${baseUrl}/assinaturas/${baseName}.png`);
         if (res.ok) {
@@ -52,29 +50,74 @@ const fetchSignatureImage = async (baseName: string) => {
 
 // --- HELPERS DE ESTILO ---
 const applyHeaderStyle = (cell: ExcelJS.Cell) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A8A" } };
-    cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-    cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+    cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF1E3A8A" }
+    };
+    cell.font = {
+        bold: true,
+        color: { argb: "FFFFFFFF" },
+        size: 10
+    };
+    cell.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+        wrapText: true
+    };
+    cell.border = {
+        top: { style: "thin" },
+        left: { style: "thin" },
+        bottom: { style: "thin" },
+        right: { style: "thin" }
+    };
 };
 
 const applyDataStyle = (cell: ExcelJS.Cell, isCenter = true) => {
-    cell.border = { top: { style: "thin", color: { argb: "FFD1D5DB" } }, left: { style: "thin", color: { argb: "FFD1D5DB" } }, bottom: { style: "thin", color: { argb: "FFD1D5DB" } }, right: { style: "thin", color: { argb: "FFD1D5DB" } } };
-    cell.alignment = { horizontal: isCenter ? "center" : "left", vertical: "middle", wrapText: true };
+    cell.border = {
+        top: { style: "thin", color: { argb: "FFD1D5DB" } },
+        left: { style: "thin", color: { argb: "FFD1D5DB" } },
+        bottom: { style: "thin", color: { argb: "FFD1D5DB" } },
+        right: { style: "thin", color: { argb: "FFD1D5DB" } }
+    };
+    cell.alignment = {
+        horizontal: isCenter ? "center" : "left",
+        vertical: "middle",
+        wrapText: true
+    };
 };
 
-// 🟢 addTableSignature mantido, mas fetchSignatureImage já está corrigido
-const addTableSignature = async (workbook: ExcelJS.Workbook, worksheet: ExcelJS.Worksheet, val: string | null, rNum: number, cNum: number, cell: ExcelJS.Cell) => {
+const addTableSignature = async (
+    workbook: ExcelJS.Workbook,
+    worksheet: ExcelJS.Worksheet,
+    val: string | null,
+    rNum: number,
+    cNum: number,
+    cell: ExcelJS.Cell
+) => {
     if (!val) return;
-    const imgFile = val.startsWith("data:image") ? { base64: val.split(",")[1], ext: "png" } : await fetchSignatureImage(val);
+
+    const imgFile = val.startsWith("data:image")
+        ? { base64: val.split(",")[1], ext: "png" }
+        : await fetchSignatureImage(val);
 
     cell.value = formatName(val);
     cell.font = { size: 8, bold: true, color: { argb: "FF003366" } };
     cell.alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
 
     if (imgFile) {
-        const imgId = workbook.addImage(val.startsWith("data:image") ? { base64: (imgFile as any).base64, extension: "png" } : { buffer: (imgFile as any).buffer, extension: (imgFile as any).ext });
-        worksheet.addImage(imgId, { tl: { col: cNum - 1 + 0.1, row: rNum - 1 + 0.1 }, ext: { width: 110, height: 35 }, editAs: "oneCell" });
+        const imgId = workbook.addImage(
+            val.startsWith("data:image")
+                ? { base64: (imgFile as any).base64, extension: "png" }
+                : { buffer: (imgFile as any).buffer, extension: (imgFile as any).ext }
+        );
+
+        worksheet.addImage(imgId, {
+            tl: { col: cNum - 1 + 0.1, row: rNum - 1 + 0.1 },
+            ext: { width: 110, height: 35 },
+            editAs: "oneCell"
+        });
+
         cell.value = `\n\n\n${formatName(val)}`;
     }
 };
@@ -106,14 +149,45 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
         title = "AFERIÇÃO DE BALANÇAS";
         codigoDoc = COMPLIANCE_MANUTENCAO.pops.balancas;
         metaFrequencia = frequencia || "Diário";
-        headers = ["Data calibração", "Identificação balança", "Quantidade medida", "Houve variação", "Quantidade variação", "Ação corretiva", "Responsável"];
-        ws.columns = [{ width: 18 }, { width: 22 }, { width: 18 }, { width: 16 }, { width: 18 }, { width: 35 }, { width: 25 }];
+        headers = ["Data calibração", "Balanças verificadas", "Qtd medida (G)", "Houve variação?", "Balança com desvio", "Qtd variação (G)", "Ação corretiva", "Responsável"];
+
+        ws.columns = [
+            { width: 15 }, // Data calibração
+            { width: 75 }, // Balanças verificadas
+            { width: 16 }, // Qtd medida
+            { width: 16 }, // Houve variação
+            { width: 18 }, // Balança com desvio
+            { width: 18 }, // Qtd variação
+            { width: 35 }, // Ação corretiva
+            { width: 25 }  // Responsável
+        ];
     }
     else if (activeTab === "reparos") {
         title = "REGISTRO DE REPAROS E MANUTENÇÕES";
         codigoDoc = COMPLIANCE_MANUTENCAO.pops.reparos;
-        headers = ["Data", "Equipamento", "Serviço", "Solicitante", "Solicitada por", "Confirmação Limpeza", "Responsável", "Coordenador da Área", "Ação corretiva"];
-        ws.columns = [{ width: 18 }, { width: 25 }, { width: 16 }, { width: 22 }, { width: 22 }, { width: 18 }, { width: 22 }, { width: 22 }, { width: 35 }];
+        headers = [
+            "Data",
+            "Equipamento",
+            "Serviço",
+            "Solicitante",
+            "Solicitada por",
+            "Limpeza do Equipamento Pós-Reparo",
+            "Responsável",
+            "Coordenador da Área",
+            "Ação corretiva"
+        ];
+
+        ws.columns = [
+            { width: 18 }, // Data
+            { width: 25 }, // Equipamento
+            { width: 16 }, // Serviço
+            { width: 22 }, // Solicitante
+            { width: 22 }, // Solicitada por
+            { width: 30 }, // Limpeza do Equipamento Pós-Reparo
+            { width: 22 }, // Responsável
+            { width: 22 }, // Coordenador da Área
+            { width: 35 }  // Ação corretiva
+        ];
     }
     else {
         title = `CHECK-LIST DE MANUTENÇÃO - ${freqChecklist.toUpperCase()}`;
@@ -122,10 +196,12 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
         const itens = freqChecklist === "Semanal" ? ITENS_SEMANAL_PHU040 : ITENS_MENSAL_PHU040;
         headers = ["Data", ...itens, "Ação corretiva", "Responsável"];
 
-        ws.getColumn(1).width = 18; // Data
-        itens.forEach((_, i) => ws.getColumn(2 + i).width = 24);
-        ws.getColumn(2 + itens.length).width = 30; // Ação
-        ws.getColumn(3 + itens.length).width = 25; // Responsável
+        ws.columns = [
+            { width: 18 },                    // Data
+            ...itens.map(() => ({ width: 24 })), // Itens verificados
+            { width: 30 },                    // Ação corretiva
+            { width: 25 }                     // Responsável
+        ];
     }
 
     const maxCol = headers.length;
@@ -152,10 +228,9 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
     ws.mergeCells(titleRow.number, 1, titleRow.number, maxCol);
     titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
 
+    // 🟢 Data de exportação removida do cabeçalho
     const metaRows: string[] = [`Área: Packing Uva`];
     if (metaFrequencia) metaRows.push(`Frequência: ${metaFrequencia}`);
-    metaRows.push(`Código do documento: ${codigoDoc}`);
-    metaRows.push(`Exportado em: ${new Date().toLocaleString("pt-BR")}`);
 
     metaRows.forEach(meta => {
         const row = ws.addRow([meta]);
@@ -171,21 +246,22 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
 
     // --- 5. RENDERIZAÇÃO DOS DADOS ---
     if (activeTab === "balancas") {
-        const filledBalancas = balancasLogs.filter(log => !!String(log.dataCalibracao || "").trim() || !!String(log.identificacaoBalanca || "").trim());
+        const filledBalancas = balancasLogs.filter(log => !!String(log.dataCalibracao || "").trim() || !!String(log.balancasVerificadas || "").trim());
 
         for (const log of filledBalancas) {
             const dataRow = ws.addRow([
                 formatSafeDate(log.dataCalibracao),
-                log.identificacaoBalanca || "",
+                log.balancasVerificadas || "",
                 log.quantidadeMedida || "",
                 log.houveVariacao || "-",
+                log.balancaComDesvio || "-",
                 log.quantidadeVariacao || "-",
                 log.acaoCorretiva || "-",
                 ""
             ]);
             dataRow.height = 55;
-            dataRow.eachCell((c, i) => applyDataStyle(c, i !== 6));
-            await addTableSignature(workbook, ws, log.responsavel || null, dataRow.number, 7, dataRow.getCell(7));
+            dataRow.eachCell((c, i) => applyDataStyle(c, i !== 8));
+            await addTableSignature(workbook, ws, log.responsavel || null, dataRow.number, 8, dataRow.getCell(8));
         }
     }
     else if (activeTab === "reparos") {
@@ -217,19 +293,28 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
         const itens = isSemanal ? ITENS_SEMANAL_PHU040 : ITENS_MENSAL_PHU040;
         const inspecoes = isSemanal ? inspecoesSemanais : inspecoesMensais;
 
-        const filledInspecoes = inspecoes.filter(insp => !!String(insp.data || "").trim());
+        const filledInspecoes = inspecoes.filter(insp =>
+            !!String(insp.data || "").trim() ||
+            (insp.respostas && Object.keys(insp.respostas).length > 0)
+        );
 
-        for (const insp of filledInspecoes) {
+        const inspecoesOrdenadas = [...filledInspecoes].sort((a, b) => {
+            const dataA = a.data ? new Date(a.data).getTime() : 0;
+            const dataB = b.data ? new Date(b.data).getTime() : 0;
+            return dataA - dataB;
+        });
+
+        for (const insp of inspecoesOrdenadas) {
             const rowData = [formatSafeDate(insp.data)];
             itens.forEach((_, i) => rowData.push(insp.respostas?.[i] ?? ""));
             rowData.push(insp.acaoCorretiva || "");
-            rowData.push(""); // Espaço da assinatura
+            rowData.push("");
 
             const dataRow = ws.addRow(rowData);
             dataRow.height = 55;
 
             const totalCells = dataRow.cellCount;
-            dataRow.eachCell((c, i) => applyDataStyle(c, i !== totalCells - 1));
+            dataRow.eachCell((c, i) => applyDataStyle(c, i !== totalCells));
 
             await addTableSignature(workbook, ws, insp.responsavel || null, dataRow.number, totalCells, dataRow.getCell(totalCells));
         }
@@ -243,7 +328,16 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
     legendTitle.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B5563" } };
     legendTitle.height = 24;
 
-    const legendLines = activeTab === "balancas" ? LEGENDA_BALANCAS : activeTab === "reparos" ? LEGENDA_REPAROS : LEGENDA_CHECKLIST;
+    let legendLines: string[] = [];
+
+    if (activeTab === "balancas") {
+        legendLines = LEGENDA_BALANCAS;
+    } else if (activeTab === "reparos") {
+        legendLines = LEGENDA_REPAROS;
+    } else {
+        legendLines = freqChecklist === "Semanal" ? LEGENDA_CHECKLIST_SEMANAL : LEGENDA_CHECKLIST_MENSAL;
+    }
+
     legendLines.forEach((line) => {
         const obsRow = ws.addRow([line]);
         ws.mergeCells(obsRow.number, 1, obsRow.number, maxCol);
@@ -251,7 +345,7 @@ export const exportManutencaoToExcel = async ({ activeTab, frequencia, freqCheck
         obsRow.height = 20;
     });
 
-    // --- 7. CONTROLE DE REVISÃO DO DOCUMENTO ---
+    // --- 7. CONTROLE DE REVISÃO DO DOCUMENTO (Com código do documento aqui) ---
     ws.addRow([]);
     const revTitleRow = ws.addRow(["CONTROLE DE REVISÃO DO DOCUMENTO"]);
     ws.mergeCells(revTitleRow.number, 1, revTitleRow.number, maxCol);

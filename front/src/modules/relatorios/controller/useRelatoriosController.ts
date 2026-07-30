@@ -1,13 +1,34 @@
 // front/src/app/(modulos)/controller/useRelatoriosController.ts
 import { useState, useEffect } from "react";
 import { ChaveModulo } from "../model/relatoriosModel";
-
-// 🟢 Importamos a API centralizada (ajuste o caminho conforme a sua pasta)
 import { RelatoriosAPI, DocumentosAPI } from "@/services/api";
 
+// 🟢 Funções auxiliares para lidar com o novo seletor de mês (YYYY-MM)
+const getMesAtualYyyyMm = () => {
+    const hoje = new Date();
+    const mm = String(hoje.getMonth() + 1).padStart(2, '0');
+    const yyyy = hoje.getFullYear();
+    return `${yyyy}-${mm}`;
+};
+
+const getDatasDoMes = (yyyyMm: string) => {
+    if (!yyyyMm) return { primeiroDia: "", ultimoDia: "" };
+    const [ano, mes] = yyyyMm.split('-');
+    const primeiroDia = new Date(Number(ano), Number(mes) - 1, 1).toISOString().split('T')[0];
+    const ultimoDia = new Date(Number(ano), Number(mes), 0).toISOString().split('T')[0];
+    return { primeiroDia, ultimoDia };
+};
+
+const getDatasMesAtual = () => getDatasDoMes(getMesAtualYyyyMm());
+
 export function useRelatoriosController() {
+    // Campos livres para o ZIP / Busca customizada
     const [dataInicio, setDataInicio] = useState("");
     const [dataFim, setDataFim] = useState("");
+
+    // 🟢 Novo estado: O mês que a tabela está exibindo no momento
+    const [mesTabela, setMesTabela] = useState(getMesAtualYyyyMm());
+
     const [loading, setLoading] = useState(false);
     const [dados, setDados] = useState<any | null>(null);
     const [moduloAtivo, setModuloAtivo] = useState<ChaveModulo | null>(null);
@@ -17,17 +38,22 @@ export function useRelatoriosController() {
         setLoading(true);
         setErro(null);
         try {
-            // 🟢 Chamada super simples, sem 'fetch' ou 'API_BASE' soltos
-            const resposta = await RelatoriosAPI.buscarDados(inicio, fim);
+            let queryInicio = inicio;
+            let queryFim = fim;
 
-            // Verifica o formato da sua resposta (se tiver a tag "sucesso")
-            if (resposta.sucesso) {
-                setDados(resposta.dados);
-            } else if (resposta.dados) {
-                // Caso a API retorne os dados direto, sem a flag "sucesso"
+            // Se não recebeu datas, puxa as datas baseadas no mês selecionado na tabela
+            if (!queryInicio || !queryFim) {
+                const { primeiroDia, ultimoDia } = mesTabela ? getDatasDoMes(mesTabela) : getDatasMesAtual();
+                queryInicio = primeiroDia;
+                queryFim = ultimoDia;
+            }
+
+            const resposta = await RelatoriosAPI.buscarDados(queryInicio, queryFim);
+
+            if (resposta.dados) {
                 setDados(resposta.dados);
             } else {
-                setDados(resposta); // Fallback caso seja o objeto cru
+                setDados(resposta);
             }
         } catch (error: any) {
             console.error(error);
@@ -37,48 +63,67 @@ export function useRelatoriosController() {
         }
     };
 
+    // Ao carregar a tela, puxa automaticamente os dados do mês atual
     useEffect(() => {
         buscarDados();
     }, []);
 
-    const handleBuscar = async () => {
+    // Botão de Buscar (Filtro Customizado Livre)
+    const handleBuscarPersonalizado = async () => {
         if (dataInicio && dataFim) {
+            setMesTabela(""); // Desativa o mês da tabela, pois agora estamos vendo um período customizado
             await buscarDados(dataInicio, dataFim);
         } else {
-            await buscarDados();
+            alert("Preencha a data inicial e final para buscar um período customizado.");
+        }
+    };
+
+    // 🟢 Quando o usuário altera apenas o mês lá na tabela
+    const handleMesTabelaChange = (novoMes: string) => {
+        setMesTabela(novoMes);
+        setDataInicio(""); // Limpa os inputs de data lá de cima
+        setDataFim("");
+        if (novoMes) {
+            const { primeiroDia, ultimoDia } = getDatasDoMes(novoMes);
+            buscarDados(primeiroDia, ultimoDia);
         }
     };
 
     const limparFiltros = () => {
         setDataInicio("");
         setDataFim("");
+        setMesTabela(getMesAtualYyyyMm());
         setModuloAtivo(null);
         setErro(null);
-        buscarDados();
+        const { primeiroDia, ultimoDia } = getDatasMesAtual();
+        buscarDados(primeiroDia, ultimoDia);
     };
 
-    // 📥 Download do ZIP (Otimizado)
     const handleExportarZip = () => {
         if (!moduloAtivo) {
             alert("Selecione um módulo para exportar.");
             return;
         }
+        // Se as datas livres estiverem preenchidas, usa elas. Se não, usa o mês da tabela.
+        let inicioZip = dataInicio;
+        let fimZip = dataFim;
 
-        // 🟢 Em vez de baixar como Blob e gastar RAM, 
-        // apenas abrimos a URL. O navegador faz o download nativamente!
-        const url = RelatoriosAPI.getUrlZip(moduloAtivo, dataInicio, dataFim);
+        if (!inicioZip || !fimZip) {
+            const { primeiroDia, ultimoDia } = mesTabela ? getDatasDoMes(mesTabela) : getDatasMesAtual();
+            inicioZip = primeiroDia;
+            fimZip = ultimoDia;
+        }
+
+        const url = RelatoriosAPI.getUrlZip(moduloAtivo, inicioZip, fimZip);
         window.open(url, "_blank");
     };
 
-    // 📥 Download de um registro individual (Otimizado)
     const handleDownloadRegistro = (registro: any) => {
         const primeiroDoc = registro.documentos?.[0];
         if (!primeiroDoc) {
             alert("Este registro não possui documento salvo.");
             return;
         }
-
-        // 🟢 Reaproveitamos a função que já existia na DocumentosAPI
         const url = DocumentosAPI.getUrlDownload(primeiroDoc.id);
         window.open(url, "_blank");
     };
@@ -86,10 +131,11 @@ export function useRelatoriosController() {
     return {
         dataInicio, setDataInicio,
         dataFim, setDataFim,
+        mesTabela, handleMesTabelaChange, // Retornando as novas funções do Mês
         loading, dados,
         moduloAtivo, setModuloAtivo,
         erro,
-        handleBuscar,
+        handleBuscarPersonalizado,
         limparFiltros,
         handleExportarZip,
         handleDownloadRegistro,

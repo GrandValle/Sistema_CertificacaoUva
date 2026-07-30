@@ -1,4 +1,4 @@
-// model/inspecaoModel.ts
+// model/condutaModel.ts
 
 export type CondutaTabType = "inspecao" | "lavagem";
 
@@ -17,7 +17,6 @@ export type WeekDayType = "Seg" | "Ter" | "Qua" | "Qui" | "Sex" | "Sáb";
 export const generateWeekDays = (weekStartString?: string) => {
     const baseDays: WeekDayType[] = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
-    // Se não houver string, retorna apenas os dias fixos
     if (!weekStartString) {
         return baseDays.map(day => ({ short: day, label: day }));
     }
@@ -26,57 +25,46 @@ export const generateWeekDays = (weekStartString?: string) => {
     let startMonth: number;
     let startYear: number;
 
-    // 1. Tenta formato extenso: "08 a 13 de Junho" ou "08 a 13 de Junho 2026"
     const matchExtenso = weekStartString.match(/(\d{2})\s*a\s*\d{2}\s*de\s*([A-Za-zç]+)(?:\s*(\d{4}))?/i);
     if (matchExtenso) {
         startDay = parseInt(matchExtenso[1], 10);
         const monthName = matchExtenso[2];
         startYear = matchExtenso[3] ? parseInt(matchExtenso[3], 10) : new Date().getFullYear();
 
-        // Mapeia nome do mês para número (0-indexado)
         const meses: Record<string, number> = {
             janeiro: 0, fevereiro: 1, março: 2, abril: 3, maio: 4, junho: 5,
             julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11
         };
         startMonth = meses[monthName.toLowerCase()] ?? 0;
     } else {
-        // 2. Tenta formato numérico: "29/07 a 04/08" ou "29/07"
         const matchSlash = weekStartString.match(/(\d{2})\/(\d{2})/);
         if (matchSlash) {
             startDay = parseInt(matchSlash[1], 10);
-            startMonth = parseInt(matchSlash[2], 10) - 1; // mês 0-indexado
+            startMonth = parseInt(matchSlash[2], 10) - 1;
             startYear = new Date().getFullYear();
         } else {
-            // 3. Fallback: tenta extrair números soltos
             const numbers = weekStartString.match(/\d+/g);
             if (numbers && numbers.length >= 2) {
                 startDay = parseInt(numbers[0], 10);
                 startMonth = parseInt(numbers[1], 10) - 1;
                 startYear = new Date().getFullYear();
             } else {
-                // Não conseguiu extrair data – retorna apenas os dias
                 return baseDays.map(day => ({ short: day, label: day }));
             }
         }
     }
 
-    // Cria a data de início
     const dataInicio = new Date(startYear, startMonth, startDay);
-
-    // Se a data for inválida, fallback
     if (isNaN(dataInicio.getTime())) {
         return baseDays.map(day => ({ short: day, label: day }));
     }
 
-    // Gera os 6 dias da semana (Seg a Sáb)
     const resultado = [];
     for (let i = 0; i < 6; i++) {
         const dataAtual = new Date(dataInicio);
         dataAtual.setDate(dataInicio.getDate() + i);
-
         const dia = String(dataAtual.getDate()).padStart(2, '0');
         const mes = String(dataAtual.getMonth() + 1).padStart(2, '0');
-
         resultado.push({
             short: baseDays[i],
             label: `${baseDays[i]} (${dia}/${mes})`
@@ -135,7 +123,10 @@ export interface ActionPlan {
     status: "pending" | "in_progress" | "completed";
 }
 
-export type LavagemStatus = "C" | "NC" | null;
+// 🔥 NOVO: Tipo para observações por dia (justificativas para dias não preenchidos)
+export type ObservacoesPorDia = Record<string, string>; // ex: { Seg: "", Ter: "", ... }
+
+export type LavagemStatus = "C" | "NC" | "F" | null;
 
 export interface LavagemTurnos {
     manha: LavagemStatus;
@@ -144,6 +135,7 @@ export interface LavagemTurnos {
 
 export interface LavagemLog {
     id: number;
+    colaboradorId?: string;
     colaborador: string;
     dias: {
         [key: string]: LavagemTurnos;
@@ -171,4 +163,25 @@ export const COMPLIANCE_LAVAGEM = {
     revisionDate: "02/01/2026",
     popCode: "PHU-039",
     area: "Packing Uva",
+};
+
+export const buildInspecaoGeralLegend = (): string[] => {
+    return [
+        "• SIM: Indica atendimento aos requisitos de boas práticas e higiene estabelecidos.",
+        "• NÃO: Indica desvio, ausência ou inadequação em relação ao padrão exigido.",
+        "",
+        "Nota: Para itens de verificação de ocorrências indesejadas (ex: presença de objetos ou sintomas),",
+        "a resposta 'NÃO' representa conformidade, enquanto 'SIM' aponta uma não conformidade."
+    ];
+};
+
+export const isInverseQuestion = (questionText: string): boolean => {
+    if (!questionText) return false;
+    const text = questionText.toLowerCase();
+    return (
+        text.includes("objetos pessoais") ||
+        text.includes("doenças gastrintestinais") ||
+        text.includes("infecções pulmonares") ||
+        text.includes("sintomas")
+    );
 };

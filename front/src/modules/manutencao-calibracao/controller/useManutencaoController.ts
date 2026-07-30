@@ -1,15 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ManutencaoTabType, RegistroBalanca, RegistroReparo, InspecaoChecklist, FrequenciaAfericao, COMPLIANCE_MANUTENCAO } from "../model/manutencaoModel";
+import {
+    ManutencaoTabType, RegistroBalanca, RegistroReparo, InspecaoChecklist,
+    COMPLIANCE_MANUTENCAO, BALANCAS_OFICIAIS
+} from "../model/manutencaoModel";
 import { exportManutencaoToExcel } from "../services/excelFormatter";
 import { STORAGE_KEYS } from "../../../constants/storageKeys";
-
-// 🟢 IMPORT ATIVADO: Trazendo a função de salvar no MySQL
+import { getHojeLocal } from "../../../utils/date";
 import { salvarDocumento } from "../../../services/api";
 
 interface ManutencaoPersistedState {
-    frequencia?: string; // 🔥 ALTERADO: agora aceita string livre
+    frequencia?: string;
     balancasLogs?: RegistroBalanca[];
     reparosLogs?: unknown[];
     inspecoesSemanais?: InspecaoChecklist[];
@@ -36,7 +38,7 @@ const normalizeReparo = (raw: any): RegistroReparo => ({
     id: typeof raw?.id === "number" ? raw.id : Date.now(),
     data: raw?.data ?? "",
     equipamento: raw?.equipamento ?? "",
-    servico: raw?.servico === "Limpeza" || raw?.servico === "Reparo" ? raw.servico : "Manutenção",
+    servico: typeof raw?.servico === "string" ? raw.servico : "Manutenção",
     solicitante: raw?.solicitante ?? null,
     solicitadaPor: raw?.solicitadaPor ?? null,
     confirmacaoLimpeza: raw?.confirmacaoLimpeza === "SIM" || raw?.confirmacaoLimpeza === "NÃO" ? raw.confirmacaoLimpeza : null,
@@ -45,6 +47,11 @@ const normalizeReparo = (raw: any): RegistroReparo => ({
     acaoCorretiva: raw?.acaoCorretiva ?? "",
     frequencia: "Mensal"
 });
+
+const getHojeYMD = () => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
 
 export function useManutencaoController() {
     const getSavedState = (): ManutencaoPersistedState | null => {
@@ -61,16 +68,27 @@ export function useManutencaoController() {
 
     const [activeTab, setActiveTab] = useState<ManutencaoTabType>("checklist");
     const [freqChecklist, setFreqChecklist] = useState<"Semanal" | "Mensal">("Semanal");
-
-    // 🔥 ALTERADO: estado agora é string, com valor inicial do savedState ou "Diário"
     const [frequencia, setFrequencia] = useState<string>(() => savedState?.frequencia ?? "Diário");
 
-    const [balancasLogs, setBalancasLogs] = useState<RegistroBalanca[]>(
-        () => savedState?.balancasLogs && savedState.balancasLogs.length > 0
-            ? savedState.balancasLogs
-            : Array.from({ length: 3 }, (_, i) => ({ id: i + 1, dataCalibracao: "", identificacaoBalanca: "", quantidadeMedida: "", houveVariacao: null, quantidadeVariacao: "", acaoCorretiva: "", responsavel: null }))
-    );
+    const defaultBalancasStr = BALANCAS_OFICIAIS.join(", ");
 
+    // 🟢 1 LINHA POR DIA COM A STRING COMPLETA DAS BALANÇAS
+    const [balancasLogs, setBalancasLogs] = useState<RegistroBalanca[]>(() => {
+        if (savedState?.balancasLogs && savedState.balancasLogs.length > 0) {
+            return savedState.balancasLogs;
+        }
+        return [{
+            id: Date.now(),
+            dataCalibracao: getHojeYMD(),
+            balancasVerificadas: defaultBalancasStr,
+            quantidadeMedida: "500",
+            houveVariacao: "NÃO",
+            quantidadeVariacao: "",
+            balancaComDesvio: "",
+            acaoCorretiva: "",
+            responsavel: null
+        }];
+    });
     const [reparosLogs, setReparosLogs] = useState<RegistroReparo[]>(
         () => Array.isArray(savedState?.reparosLogs) && savedState.reparosLogs.length > 0
             ? savedState.reparosLogs.map(normalizeReparo)
@@ -89,14 +107,10 @@ export function useManutencaoController() {
     );
 
     const [semanalExpandido, setSemanalExpandido] = useState<number | null>(
-        () => typeof savedState?.semanalExpandido === "number"
-            ? savedState.semanalExpandido
-            : (inspecoesSemanais[0]?.id ?? null)
+        () => typeof savedState?.semanalExpandido === "number" ? savedState.semanalExpandido : (inspecoesSemanais[0]?.id ?? null)
     );
     const [mensalExpandido, setMensalExpandido] = useState<number | null>(
-        () => typeof savedState?.mensalExpandido === "number"
-            ? savedState.mensalExpandido
-            : (inspecoesMensais[0]?.id ?? null)
+        () => typeof savedState?.mensalExpandido === "number" ? savedState.mensalExpandido : (inspecoesMensais[0]?.id ?? null)
     );
 
     useEffect(() => {
@@ -105,8 +119,36 @@ export function useManutencaoController() {
         }));
     }, [frequencia, balancasLogs, reparosLogs, inspecoesSemanais, inspecoesMensais, semanalExpandido, mensalExpandido]);
 
-    const addBalancaRow = () => setBalancasLogs([...balancasLogs, { id: Date.now(), dataCalibracao: "", identificacaoBalanca: "", quantidadeMedida: "", houveVariacao: null, quantidadeVariacao: "", acaoCorretiva: "", responsavel: null }]);
-    const updateBalancaRow = (id: number, field: keyof RegistroBalanca, value: any) => setBalancasLogs(balancasLogs.map(r => r.id === id ? { ...r, [field]: value } : r));
+    const addBalancaRow = () => setBalancasLogs([
+        {
+            id: Date.now(),
+            dataCalibracao: getHojeYMD(),
+            balancasVerificadas: defaultBalancasStr,
+            quantidadeMedida: "500",
+            houveVariacao: "NÃO",
+            quantidadeVariacao: "",
+            balancaComDesvio: "",
+            acaoCorretiva: "",
+            responsavel: null
+        },
+        ...balancasLogs
+    ]);
+
+    const updateBalancaRow = (id: number, field: keyof RegistroBalanca, value: any) => {
+        setBalancasLogs(balancasLogs.map(r => {
+            if (r.id === id) {
+                const updated = { ...r, [field]: value };
+                if (field === "houveVariacao" && value === "NÃO") {
+                    updated.quantidadeVariacao = "";
+                    updated.balancaComDesvio = "";
+                    updated.acaoCorretiva = "";
+                }
+                return updated;
+            }
+            return r;
+        }));
+    };
+
     const removeBalancaRow = (id: number) => setBalancasLogs(balancasLogs.filter(r => r.id !== id));
 
     const addReparoRow = () => setReparosLogs([createEmptyReparo(Date.now()), ...reparosLogs]);
@@ -159,11 +201,11 @@ export function useManutencaoController() {
         }));
     };
 
-    // 🟢 FUNÇÃO EXPORTAR TOTALMENTE LIGADA AO BACK-END
     const exportarExcel = async () => {
         try {
             const now = new Date();
-            const mesAtual = now.toISOString().slice(0, 7);
+            const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+            const hojeData = getHojeLocal();
 
             let tipoNome = "";
             let freqNome = "";
@@ -179,16 +221,13 @@ export function useManutencaoController() {
                 codigoDoc = COMPLIANCE_MANUTENCAO.pops.reparos;
             } else if (activeTab === "balancas") {
                 tipoNome = "Aferição de Balanças";
-                freqNome = frequencia || "Não definida";
+                freqNome = frequencia || "Diário";
                 codigoDoc = COMPLIANCE_MANUTENCAO.pops.balancas;
             }
 
-            console.log(`Gerando arquivo Excel de ${tipoNome}...`);
-
-            // 1. Gera o Blob do Excel
             const excelBlob = await exportManutencaoToExcel({
                 activeTab,
-                frequencia: frequencia as any, // 🔥 Agora é string, sem conflito de tipo
+                frequencia: frequencia as any,
                 freqChecklist,
                 balancasLogs,
                 reparosLogs,
@@ -196,7 +235,6 @@ export function useManutencaoController() {
                 inspecoesMensais
             });
 
-            // 2. Prepara os dados do JSON para a API
             let dadosManutencao = {};
             if (activeTab === "checklist") {
                 dadosManutencao = { frequencia: freqChecklist, logs: freqChecklist === "Semanal" ? inspecoesSemanais : inspecoesMensais };
@@ -215,19 +253,13 @@ export function useManutencaoController() {
                 dadosManutencao: dadosManutencao
             };
 
-            console.log("Enviando dados para o servidor...");
-
-            // 3. Salva no Banco de Dados
-            const resposta = await salvarDocumento(
+            await salvarDocumento(
                 "manutencao_calibracao",
                 dadosDoBanco,
                 excelBlob as Blob,
-                `Manutencao_${tipoNome.replace(/\s+/g, '_')}_${now.getTime()}.xlsx`
+                `Manutencao_${tipoNome.replace(/\s+/g, '_')}_${hojeData}.xlsx`
             );
 
-            console.log("Sucesso! Salvo no banco com o ID:", resposta.id);
-
-            // 4. Limpa APENAS a aba ativa
             if (activeTab === "checklist") {
                 if (freqChecklist === "Semanal") {
                     setInspecoesSemanais([{ id: Date.now(), data: "", respostas: {}, acaoCorretiva: "", responsavel: null }]);
@@ -239,13 +271,19 @@ export function useManutencaoController() {
             } else if (activeTab === "reparos") {
                 setReparosLogs([createEmptyReparo(Date.now())]);
             } else if (activeTab === "balancas") {
-                setFrequencia("Diário");
-                setBalancasLogs(Array.from({ length: 3 }, (_, i) => ({
-                    id: Date.now() + i, dataCalibracao: "", identificacaoBalanca: "", quantidadeMedida: "", houveVariacao: null, quantidadeVariacao: "", acaoCorretiva: "", responsavel: null
-                })));
+                setBalancasLogs([{
+                    id: Date.now(),
+                    dataCalibracao: getHojeYMD(),
+                    balancasVerificadas: defaultBalancasStr,
+                    quantidadeMedida: "500",
+                    houveVariacao: "NÃO",
+                    quantidadeVariacao: "",
+                    balancaComDesvio: "",
+                    acaoCorretiva: "",
+                    responsavel: null
+                }]);
             }
 
-            // 5. Atualiza a tela de histórico
             window.dispatchEvent(new Event("storage"));
             window.dispatchEvent(new Event("historicoAtualizado"));
 

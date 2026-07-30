@@ -9,6 +9,7 @@ import { STORAGE_KEYS } from "../../../constants/storageKeys";
 
 import { exportControleQualidadeToExcel } from "../services/excelFormatter";
 import { salvarDocumento } from "../../../services/api";
+import { getHojeLocal } from "../../../utils/date";
 
 export function useControleQualidadeController() {
     const [activeTab, setActiveTab] = useState<CQTabType>("vidros");
@@ -55,7 +56,7 @@ export function useControleQualidadeController() {
         () => savedState?.inusuaisLogs?.length
             ? savedState.inusuaisLogs
             : [{
-                id: 1, data: new Date().toISOString().split('T')[0], descricao: "", status: "pendente", acaoCorretiva: "", respCorrecao: null, respPacking: null
+                id: 1, data: getHojeLocal(), descricao: "", status: "pendente", acaoCorretiva: "", respCorrecao: null, respPacking: null
             }]
     );
     const [rejeitosLogs, setRejeitosLogs] = useState<any[]>(() => savedState?.rejeitosLogs || []);
@@ -110,11 +111,12 @@ export function useControleQualidadeController() {
                 if (cUpper.includes("ARMADILHA") || cUpper.includes("QUANTIDADE")) {
                     newGrid[`${s}_${c}`] = "";
                 } else {
-                    newGrid[`${s}_${c}`] = "SIM";
+                    // 🔥 CORRIGIDO: Agora o padrão é "NÃO"
+                    newGrid[`${s}_${c}`] = "NÃO";
                 }
             });
         });
-        setPragasLogs([{ id: Date.now(), data: new Date().toISOString().split('T')[0], monitor: null, grid: newGrid, acaoCorretiva: "" }, ...pragasLogs]);
+        setPragasLogs([{ id: Date.now(), data: getHojeLocal(), monitor: null, grid: newGrid, acaoCorretiva: "" }, ...pragasLogs]);
     };
 
     const updatePragaLog = <K extends keyof PragasLog>(id: number, field: K, value: PragasLog[K]) => setPragasLogs(pragasLogs.map(log => log.id === id ? { ...log, [field]: value } : log));
@@ -136,7 +138,8 @@ export function useControleQualidadeController() {
             setPragasLogs(prev => prev.map(log => {
                 const newGrid = { ...log.grid };
                 setoresPragas.forEach(setor => {
-                    newGrid[`${setor}_${pragaUpper}`] = "SIM";
+                    // 🔥 CORRIGIDO: Nova praga já entra como "NÃO"
+                    newGrid[`${setor}_${pragaUpper}`] = "NÃO";
                 });
                 return { ...log, grid: newGrid };
             }));
@@ -168,7 +171,8 @@ export function useControleQualidadeController() {
                     if (colUpper.includes("ARMADILHA") || colUpper.includes("QUANTIDADE")) {
                         newGrid[`${setorTrim}_${col}`] = "";
                     } else {
-                        newGrid[`${setorTrim}_${col}`] = "SIM";
+                        // 🔥 CORRIGIDO: Novo setor já entra com tudo "NÃO"
+                        newGrid[`${setorTrim}_${col}`] = "NÃO";
                     }
                 });
                 return { ...log, grid: newGrid };
@@ -190,7 +194,7 @@ export function useControleQualidadeController() {
     };
 
     // --- Funções Inusuais ---
-    const addInusualLog = () => setInusuaisLogs([{ id: Date.now(), data: new Date().toISOString().split('T')[0], descricao: "", status: "pendente", acaoCorretiva: "", respCorrecao: null, respPacking: null }, ...inusuaisLogs]);
+    const addInusualLog = () => setInusuaisLogs([{ id: Date.now(), data: getHojeLocal(), descricao: "", status: "pendente", acaoCorretiva: "", respCorrecao: null, respPacking: null }, ...inusuaisLogs]);
     const updateInusualLog = <K extends keyof InusuaisLog>(id: number, field: K, value: InusuaisLog[K]) => setInusuaisLogs(inusuaisLogs.map(log => log.id === id ? { ...log, [field]: value } : log));
     const removeInusualLog = (id: number) => setInusuaisLogs(inusuaisLogs.filter(log => log.id !== id));
 
@@ -244,6 +248,7 @@ export function useControleQualidadeController() {
     // --- Histórico ---
     const getHistoryRecord = () => {
         const now = new Date();
+        const mesAtualLocal = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const tabNameMap: Record<CQTabType, string> = { vidros: "Vidros", pragas: "Pragas", inusuais: "Inusuais", rejeitos: "Rejeitos", residuos: "Resíduos" };
         let totalItems = 0;
         if (activeTab === "vidros") totalItems = vidrosLogs.length;
@@ -256,7 +261,7 @@ export function useControleQualidadeController() {
             module: "qualidade",
             record: {
                 id: `QLD-${now.getTime()}`,
-                mes: now.toISOString().slice(0, 7),
+                mes: mesAtualLocal,
                 aba: tabNameMap[activeTab] || "Qualidade",
                 exportedAt: now.toLocaleString("pt-BR"),
                 status: totalItems > 0 ? "completo" : "pendente",
@@ -269,7 +274,7 @@ export function useControleQualidadeController() {
         try {
             console.log("Gerando arquivo Excel de Controle de Qualidade...");
             const now = new Date();
-            const mesAtual = now.toISOString().slice(0, 7);
+            const mesAtual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
             const tabNameMap: Record<CQTabType, string> = { vidros: "Vidros", pragas: "Pragas", inusuais: "Inusuais", rejeitos: "Rejeitos", residuos: "Resíduos" };
 
             const docCodeMap: Record<CQTabType, string> = {
@@ -321,7 +326,7 @@ export function useControleQualidadeController() {
                     setPragasLogs([]);
                     break;
                 case "inusuais":
-                    setInusuaisLogs([{ id: 1, data: new Date().toISOString().split('T')[0], descricao: "", status: "pendente", acaoCorretiva: "", respCorrecao: null, respPacking: null }]);
+                    setInusuaisLogs([{ id: 1, data: getHojeLocal(), descricao: "", status: "pendente", acaoCorretiva: "", respCorrecao: null, respPacking: null }]);
                     break;
                 case "rejeitos":
                     setRejeitosLogs([]);

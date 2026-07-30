@@ -7,7 +7,7 @@ export type SystemCategory =
     | "Seguranca"
     | "Manutencao"
     | "Qualidade"
-//| "Administrativo";
+    | "Administrativo";
 
 export type SystemDefinition = {
     id: string;
@@ -31,10 +31,21 @@ export const systemCategories: Array<{
         { id: "Seguranca", name: "Segurança" },
         { id: "Manutencao", name: "Manutenção" },
         { id: "Qualidade", name: "Qualidade" },
-        //{ id: "Administrativo", name: "Administrativo" },
+        { id: "Administrativo", name: "Administrativo" },
     ];
 
 export const systems: SystemDefinition[] = [
+
+    {
+        id: "relatorios",
+        href: "/relatorios",
+        title: "Histórico de Registros",
+        description: "Central de acesso ao acervo de relatórios e histórico.",
+        category: "Administrativo",
+        icon: "file-text",
+        accentClass: "from-slate-700 to-slate-900",
+        primaryCode: "PHU-00",
+    },
 
     {
         id: "higienizacao-geral",
@@ -59,8 +70,8 @@ export const systems: SystemDefinition[] = [
     {
         id: "estoque-materiais",
         href: "/estoque-materiais",
-        title: "Estoque e Materiais",
-        description: "Administração de materiais, ferramentas e itens de uso.",
+        title: "Gestão de Materiais e Equipamentos",
+        description: "Controle de estoque, produtos e materiais de uso interno.",
         category: "Estoque",
         icon: "boxes",
         accentClass: "from-violet-500 to-purple-600",
@@ -74,7 +85,7 @@ export const systems: SystemDefinition[] = [
         category: "Qualidade",
         icon: "flask",
         accentClass: "from-cyan-500 to-blue-600",
-        primaryCode: "POP-13",
+        primaryCode: "PHU-13",
     },
     {
         id: "conduta-higiene",
@@ -93,7 +104,7 @@ export const systems: SystemDefinition[] = [
         description: "Calibração de balanças e cronograma de reparos preventivos.",
         category: "Manutencao",
         icon: "wrench",
-        accentClass: "from-slate-600 to-zinc-800",
+        accentClass: "from-gray-500 to-gray-700",
         primaryCode: "PHU-44",
     },
     {

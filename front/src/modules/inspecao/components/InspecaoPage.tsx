@@ -2,40 +2,98 @@
 
 import { SignatureSelector } from "../../../components/SignatureSelector";
 import { useInspecaoController } from "../controller/useInspecaoController";
-import { WEEK_DAYS } from "../model/inspecaoModel";
+import {
+  WEEK_DAYS,
+  ITENS_SEGURANCA_TRANSPORTE,
+  criarSegurancaTransportePadrao,
+  SegurancaTransporteItem
+} from "../model/inspecaoModel";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
-  BiPlus, BiHistory, BiPackage,
+  BiPlus, BiHistory,
   BiCheckCircle, BiXCircle, BiCalendarWeek,
-  BiBuilding, BiUser, BiError, BiWater, BiTrash, BiTime
+  BiBuilding, BiUser, BiError, BiTrash, BiTime, BiX,
+  BiCheck, BiCalendar, BiCar
 } from "react-icons/bi";
-import { FaTractor } from "react-icons/fa";
-import { PRODUTOS_LIMPEZA } from "../model/inspecaoModel";
+import { FaTruck } from "react-icons/fa";
 
 export default function InspecaoPage() {
   const [isMounted, setIsMounted] = useState(false);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setIsMounted(true); }, []);
+
   const {
     activeTab, setActiveTab,
     preOpInfo, setPreOpInfo,
     preOpData, togglePreOp,
     actionPlans, addActionRow, updateAction, removeActionRow,
-    transportLogs, addTransportRow, updateTransport, removeTransportRow,
-    packagingLogs, addPackagingRow, updatePackaging, removePackagingRow,
-    selectedCleaningProduct,
-    cleaningLogs, addCleaningRow, updateCleaning, removeCleaningRow,
     foreignObjectLogs,
     FOREIGN_OBJECT_LOCATIONS,
     addForeignObjectRow,
     updateForeignObject,
     removeForeignObjectRow,
-    // 🟢 CORREÇÃO: Trocado os métodos antigos pela nossa nova função direta
-    exportarExcel
+    exportarExcel,
+    observacoesGerais,
+    addObservacaoGeral,
+    removeObservacaoGeral,
+    updateObservacaoGeral,
   } = useInspecaoController();
 
-  // Cálculo de resumo (Corrigido: sem a trava isMounted)
+  // 🔥 ESTADO: COLUNAS DE TRANSPORTE (Lado a Lado com Rolagem)
+  const [colunasTransporte, setColunasTransporte] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("seguranca_transporte_colunas");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed;
+          }
+        } catch (e) { /* ignore */ }
+      }
+    }
+    return [{
+      id: Date.now(),
+      dataInspecao: "",
+      placa: "",
+      responsavel: null,
+      itens: ITENS_SEGURANCA_TRANSPORTE.map((textoItem: any) => ({
+        item: typeof textoItem === "string" ? textoItem : textoItem.item,
+        conforme: null,
+        observacao: "",
+        acaoCorretiva: ""
+      })),
+      observacaoGeral: "",
+      acaoCorretivaGeral: ""
+    }];
+  });
+
+  // Salvar colunas no localStorage
+  useEffect(() => {
+    localStorage.setItem("seguranca_transporte_colunas", JSON.stringify(colunasTransporte));
+  }, [colunasTransporte]);
+
+  const adicionarColunaCaminhao = () => {
+    setColunasTransporte(prev => [
+      ...prev,
+      {
+        id: Date.now(),
+        dataInspecao: "",
+        placa: "",
+        responsavel: null,
+        itens: ITENS_SEGURANCA_TRANSPORTE.map((textoItem: any) => ({
+          item: typeof textoItem === "string" ? textoItem : textoItem.item,
+          conforme: null,
+          observacao: "",
+          acaoCorretiva: ""
+        })),
+        observacaoGeral: "",
+        acaoCorretivaGeral: ""
+      }
+    ]);
+  };
+
+  // Cálculo de resumo (pré-inspeção)
   let totalChecks = 0; let conformes = 0; let naoConformes = 0;
   preOpData.forEach(row => {
     Object.values(row.checks).forEach(val => {
@@ -47,8 +105,7 @@ export default function InspecaoPage() {
 
   const getDocInfo = () => {
     if (activeTab === "pre_inspecao") return { code: "2.11.7", name: "Pré-Inspeção Operacional", title: "PRÉ-INSPEÇÃO OPERACIONAL" };
-    if (activeTab === "transporte") return { code: "PHU-031", name: "Controle de higiene dos veículos e contentores", title: "INSPEÇÃO DE TRANSPORTE" };
-    if (activeTab === "embalagem") return { code: "PHU-032", name: "Inspeção de Material de Embalagem", title: "INSPEÇÃO DE MATERIAL DE EMBALAGEM" };
+    if (activeTab === "transporte") return { name: "Inspeção de Segurança no Transporte da Fruta", title: "INSPEÇÃO DE TRANSPORTE" };
     if (activeTab === "objetos_estranhos") return { code: "PHU-033", name: "Controle de inspeção de objetos estranhos", title: "INSPEÇÃO DE OBJETOS ESTRANHOS" };
     return { code: "PHU-036", name: "Entrada de Material de Limpeza", title: "INSPEÇÃO DE MATERIAIS DE LIMPEZA" };
   };
@@ -74,35 +131,16 @@ export default function InspecaoPage() {
 
   const getCategoryBadgeClass = (category: string) => {
     const normalized = category.trim().toLowerCase();
-    if (normalized === "instalações" || normalized === "instalacoes") {
-      return "bg-orange-50 text-orange-700 border-orange-200";
-    }
-    if (normalized === "suprimentos") {
-      return "bg-teal-50 text-teal-700 border-teal-200";
-    }
-    if (normalized === "higiene" || normalized === "limpeza") {
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    }
-    if (normalized === "pragas" || normalized === "controle de pragas") {
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    }
-    if (normalized === "segurança" || normalized === "seguranca") {
-      return "bg-red-50 text-red-700 border-red-200";
-    }
-    if (normalized === "área externa" || normalized === "area externa") {
-      return "bg-cyan-50 text-cyan-700 border-cyan-200";
-    }
-    if (normalized === "logística" || normalized === "logistica") {
-      return "bg-violet-50 text-violet-700 border-violet-200";
-    }
-    if (normalized === "frio") {
-      return "bg-indigo-50 text-indigo-700 border-indigo-200";
-    }
+    if (normalized === "instalações" || normalized === "instalacoes") return "bg-orange-50 text-orange-700 border-orange-200";
+    if (normalized === "suprimentos") return "bg-teal-50 text-teal-700 border-teal-200";
+    if (normalized === "higiene" || normalized === "limpeza") return "bg-emerald-50 text-emerald-700 border-emerald-200";
+    if (normalized === "pragas" || normalized === "controle de pragas") return "bg-blue-50 text-blue-700 border-blue-200";
+    if (normalized === "segurança" || normalized === "seguranca") return "bg-red-50 text-red-700 border-red-200";
+    if (normalized === "área externa" || normalized === "area externa") return "bg-cyan-50 text-cyan-700 border-cyan-200";
+    if (normalized === "logística" || normalized === "logistica") return "bg-violet-50 text-violet-700 border-violet-200";
+    if (normalized === "frio") return "bg-indigo-50 text-indigo-700 border-indigo-200";
     return "bg-slate-50 text-slate-700 border-slate-200";
   };
-
-  // Filtra os logs para mostrar apenas os do produto selecionado na aba de limpeza
-  const currentCleaningLogs = cleaningLogs || [];
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 sm:p-6 font-sans text-gray-800 flex justify-center">
@@ -127,12 +165,13 @@ export default function InspecaoPage() {
             </div>
           </div>
 
+          {/* MENU DE ABAS */}
           <div className="flex flex-wrap md:flex-nowrap gap-2 px-6 pb-4">
             <button type="button" onClick={() => setActiveTab("pre_inspecao")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "pre_inspecao" ? "bg-orange-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}>📋 Pré-Inspeção & Ação</button>
-            <button type="button" onClick={() => setActiveTab("transporte")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "transporte" ? "bg-blue-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}><FaTractor size={18} /> Transporte</button>
-            <button type="button" onClick={() => setActiveTab("embalagem")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "embalagem" ? "bg-purple-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}><BiPackage size={18} /> Embalagem</button>
+            <button type="button" onClick={() => setActiveTab("transporte")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "transporte" ? "bg-blue-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}>
+              <FaTruck size={18} /> Transporte
+            </button>
             <button type="button" onClick={() => setActiveTab("objetos_estranhos")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "objetos_estranhos" ? "bg-amber-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}><BiError size={18} /> Obj. Estranhos</button>
-            <button type="button" onClick={() => setActiveTab("limpeza")} className={`flex-1 py-3 px-2 text-[11px] sm:text-xs font-bold uppercase rounded-lg transition-all flex justify-center items-center gap-2 ${activeTab === "limpeza" ? "bg-cyan-600 text-white shadow-md" : "bg-[#2a2d36] text-gray-400 hover:text-white"}`}><BiWater size={18} /> Mat. Limpeza</button>
           </div>
         </div>
 
@@ -167,7 +206,6 @@ export default function InspecaoPage() {
                   </div>
                 </div>
 
-                {/* PAINEL DE RESUMO CORRIGIDO: sem isMounted e com suppressHydrationWarning */}
                 <div className="lg:w-64 bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col justify-center">
                   <h3 className="text-sm font-bold text-center text-gray-800 mb-4 tracking-tighter">RESUMO</h3>
                   <div className="space-y-2.5 text-sm">
@@ -187,7 +225,6 @@ export default function InspecaoPage() {
                 </div>
               </div>
 
-              {/* TABELA DE CHECKLIST */}
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <table className="w-full border-collapse">
                   <thead className="bg-gray-50 border-b border-gray-200">
@@ -198,7 +235,6 @@ export default function InspecaoPage() {
                           {d.short}
                         </th>
                       ))}
-
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -238,14 +274,55 @@ export default function InspecaoPage() {
                 </table>
               </div>
 
-              {/* PLANO DE AÇÃO CORRETIVA */}
+              <div className="mt-4 bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+                <div className="flex justify-between items-center mb-3">
+                  <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                    <BiError size={18} className="text-orange-500" />
+                    Observações Gerais da Semana
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addObservacaoGeral}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold rounded-lg transition-colors"
+                  >
+                    <BiPlus size={16} /> Adicionar
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {observacoesGerais.length === 0 ? (
+                    <p className="text-sm text-gray-400 italic">Nenhuma observação registrada. Clique em "Adicionar" para começar.</p>
+                  ) : (
+                    observacoesGerais.map((obs, idx) => (
+                      <div key={idx} className="flex items-start gap-2">
+                        <textarea
+                          value={obs}
+                          onChange={(e) => updateObservacaoGeral(idx, e.target.value)}
+                          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none resize-y transition-all"
+                          rows={2}
+                          placeholder={`Observação ${idx + 1} (ex: feriado, manutenção, intercorrência...)`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeObservacaoGeral(idx)}
+                          className="mt-1 text-gray-400 hover:text-red-500 transition-colors p-1"
+                          title="Remover esta observação"
+                        >
+                          <BiX size={20} />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
               <div className="bg-[#fff8f6] border border-red-100 rounded-2xl p-5 sm:p-7 shadow-sm">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 bg-red-100 text-red-600 rounded-xl flex items-center justify-center shadow-sm border border-red-200/50"><BiError size={24} /></div>
                     <div>
                       <h3 className="text-xl font-black text-red-900 tracking-tight">Plano de Ação Corretiva</h3>
-                      <p className="text-sm font-medium text-red-600/80 mt-0.5">Preencher quando houver &quot;Não Conformidade&quot; identificada</p>
+                      <p className="text-sm font-medium text-red-600/80 mt-0.5">Preencher quando houver "Não Conformidade" identificada</p>
                     </div>
                   </div>
                   <button
@@ -272,7 +349,7 @@ export default function InspecaoPage() {
                           <input type="text" value={action.item} onChange={(e) => updateAction(idx, 'item', e.target.value)} className="w-full h-11 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-red-500 outline-none text-gray-700 text-center font-bold shadow-sm" placeholder="Ex: 05" />
                         </div>
                         <div className="w-full md:w-80">
-                          <label className="text-xs font-bold text-gray-700 mb-1.5 block uppercase tracking-tighter">Responsável (Assinatura)</label>
+                          <label className="text-xs font-bold text-gray-700 mb-1.5 block uppercase tracking-tighter">Responsável</label>
                           <SignatureSelector value={action.responsavel} onChange={(v) => updateAction(idx, 'responsavel', v)} />
                         </div>
                       </div>
@@ -294,253 +371,180 @@ export default function InspecaoPage() {
             </div>
           )}
 
-          {/* ================= ABA 2: TRANSPORTE ================= */}
+          {/* ================= ABA 2: TRANSPORTE (COLUNAS LATERAIS COM ROLAGEM) ================= */}
           {activeTab === "transporte" && (
             <div className="space-y-4 animate-fade-in">
-              <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-blue-100 text-blue-600 rounded-lg"><FaTractor size={22} /></div>
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center shadow-sm border border-blue-200/50">
+                    <FaTruck size={24} />
+                  </div>
                   <div>
-                    <h2 className="font-bold text-gray-800 text-lg">Inspeção do Transporte de Colheita</h2>
-                    <p className="text-xs text-gray-500 font-medium tracking-wide">Documento PHU-031 - Controle de higiene dos veículos e contentores</p>
+                    <h2 className="text-lg sm:text-xl font-black text-blue-950 uppercase tracking-tight">
+                      Inspeção de Segurança no Transporte da Fruta
+                    </h2>
+                    <p className="text-[11px] font-bold text-blue-700/70 mt-0.5 uppercase tracking-wider">
+                      Caminhão-Baú — Registros em Colunas
+                    </p>
                   </div>
                 </div>
-                <button type="button" onClick={addTransportRow} className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all"><BiPlus size={18} /> Novo Veículo</button>
-              </div>
 
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr className="text-[11px] uppercase tracking-tighter text-gray-500 font-black">
-                      <th className="p-4 text-left">Data / Período</th>
-                      {['Baú Limpo', 'Sem Odor', 'Livre de Animais', 'Contentor Limpo'].map(h => <th key={h} className="p-4 text-center">{h}</th>)}
-                      <th className="p-4 text-left">Monitor Responsável</th>
-                      <th className="p-4"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {transportLogs.map((log, idx) => (
-                      <tr key={log.id} className="hover:bg-blue-50/30 transition-colors group">
-                        <td className="p-4 w-48"><input type="date" value={log.date} onChange={(e) => updateTransport(idx, 'date', e.target.value)} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs focus:ring-blue-500 outline-none shadow-sm" /></td>
-                        {['bauLimpo', 'semOdor', 'livreAnimais', 'contentorLimpo'].map(f => (
-                          <td key={f} className="p-4 text-center">
-                            <div className="flex gap-1 justify-center">
-                              {(['C', 'NC'] as const).map((opt) => {
-                                const isSelected = log[f as keyof typeof log] === opt;
-                                const isConforme = opt === 'C';
-
-                                return (
-                                  <button
-                                    key={opt}
-                                    type="button"
-                                    onClick={() => updateTransport(idx, f as any, isSelected ? null : opt)}
-                                    className={`w-9 h-9 rounded-lg font-black text-[10px] transition-all ${isSelected
-                                      ? (isConforme ? 'bg-green-500 text-white shadow-md' : 'bg-red-500 text-white shadow-md')
-                                      : `bg-gray-100 border border-gray-200 text-gray-400 ${isConforme ? 'hover:bg-green-50' : 'hover:bg-red-50'}`
-                                      }`}
-                                  >
-                                    {opt}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </td>
-                        ))}
-                        <td className="p-4 w-56"><SignatureSelector value={log.monitor} onChange={(v) => updateTransport(idx, 'monitor', v)} /></td>
-                        <td className="p-4 text-center"><button type="button" onClick={() => removeTransportRow(log.id)} className="text-gray-300 hover:text-red-500 transition-colors"><BiXCircle size={22} /></button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* ================= ABA 3: EMBALAGEM (PHU-032) ================= */}
-          {activeTab === "embalagem" && (
-            <div className="space-y-6 animate-fade-in">
-              {/* HEADER */}
-              <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-purple-100 text-purple-600 rounded-lg"><BiPackage size={22} /></div>
-                  <div>
-                    <h2 className="font-bold text-gray-800 text-lg">Inspeção de Material de Embalagem</h2>
-                    <p className="text-xs text-gray-500 font-medium tracking-wide">Documento PHU-032 1.3.6 - Controle de qualidade de insumos</p>
-                  </div>
-                </div>
                 <button
                   type="button"
-                  onClick={addPackagingRow}
-                  className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-purple-600 text-white rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all"
+                  onClick={adicionarColunaCaminhao}
+                  className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-5 py-2.5 rounded-xl font-bold transition-all shadow-md active:scale-95 text-sm shrink-0"
                 >
-                  <BiPlus size={18} /> Novo Registro
+                  <BiPlus size={20} /> Adicionar Nova Coluna
                 </button>
               </div>
 
-              {/* LISTA DE CARDS */}
-              <div className="space-y-6">
-                {packagingLogs.map((p, idx) => (
-                  <div key={p.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                    {/* Cabeçalho do card com número e botão remover */}
-                    <div className="bg-gray-50 px-5 py-3 border-b border-gray-200 flex justify-between items-center">
-                      <span className="font-bold text-gray-700 text-sm uppercase tracking-wider">
-                        Registro #{idx + 1}
-                      </span>
-                      <button
-                        onClick={() => removePackagingRow(p.id)}
-                        className="text-gray-400 hover:text-red-500 transition-colors"
-                      >
-                        <BiXCircle size={20} />
-                      </button>
-                    </div>
-
-                    {/* CORPO DO CARD */}
-                    <div className="p-5 space-y-5">
-                      {/* Linha 1: Data, Material, Quantidade, Lote, Validade */}
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Data</label>
-                          <input
-                            type="date"
-                            value={p.date}
-                            onChange={(e) => updatePackaging(idx, 'date', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Tipo de Material</label>
-                          <input
-                            type="text"
-                            placeholder="Papelão, plástico..."
-                            value={p.materialType}
-                            onChange={(e) => updatePackaging(idx, 'materialType', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Quantidade</label>
-                          <input
-                            type="text"
-                            placeholder="0"
-                            value={p.quantity}
-                            onChange={(e) => updatePackaging(idx, 'quantity', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Lote</label>
-                          <input
-                            type="text"
-                            placeholder="LOTE"
-                            value={p.lote}
-                            onChange={(e) => updatePackaging(idx, 'lote', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Validade</label>
-                          <input
-                            type="date"
-                            value={p.validity}
-                            onChange={(e) => updatePackaging(idx, 'validity', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-purple-400"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Linha 2: Status da Inspeção */}
-                      <div className="bg-purple-50 border border-purple-100 rounded-xl p-4">
-
-                        <h4 className="text-purple-700 font-bold text-sm mb-4 uppercase tracking-wide">
-                          Status da Inspeção
-                        </h4>
-
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-                          {[
-                            { key: "livrePragas", label: "Livre de Pragas/Roedores?" },
-                            { key: "embalagemFechada", label: "Embalagem Fechada?" },
-                            { key: "qualidadeConforme", label: "Qualidade Conforme?" }
-                          ].map((item) => (
-
-                            <div
-                              key={item.key}
-                              className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between shadow-sm"
-                            >
-
-                              <span className="text-sm font-semibold text-gray-700 leading-tight max-w-35">
-                                {item.label}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex">
+                <div className="overflow-x-auto w-full pb-4 hide-scrollbar">
+                  <table className="w-full text-sm border-collapse min-w-max">
+                    <thead className="bg-gray-50 border-b border-gray-200">
+                      <tr>
+                        <th className="py-4 px-5 text-left font-black text-gray-700 text-xs uppercase tracking-wider min-w-[300px] sticky left-0 bg-gray-50 z-10 border-r border-gray-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                          Itens Verificados
+                        </th>
+                        {colunasTransporte.map((coluna: any, idx: number) => (
+                          <th key={coluna.id} className="p-3 border-r border-gray-200 min-w-[280px] bg-white align-top">
+                            <div className="flex justify-between items-center mb-3">
+                              <span className="bg-blue-900 text-white text-[10px] font-black uppercase px-2.5 py-1 rounded-md">
+                                Coluna #{idx + 1}
                               </span>
+                              {colunasTransporte.length > 1 && (
+                                <button
+                                  onClick={() => setColunasTransporte(prev => prev.filter((c: any) => c.id !== coluna.id))}
+                                  className="text-gray-400 hover:text-rose-500 transition-colors p-1"
+                                >
+                                  <BiTrash size={16} />
+                                </button>
+                              )}
+                            </div>
 
-                              <div className="flex gap-2">
-                                {['C', 'NC'].map((val) => {
-                                  const isSelected = p[item.key as keyof typeof p] === val;
-                                  const isGreen = val === "C";
-
-                                  return (
-                                    <button
-                                      key={val}
-                                      type="button"
-                                      onClick={() => updatePackaging(idx, item.key as any, isSelected ? "" : val)}
-                                      className={`w-12 h-10 rounded-lg font-bold text-sm transition-all ${isSelected
-                                        ? isGreen ? "bg-green-500 text-white shadow-md" : "bg-red-500 text-white shadow-md"
-                                        : isGreen ? "bg-white border border-green-300 text-green-600" : "bg-white border border-red-300 text-red-500"
-                                        }`}
-                                    >
-                                      {val}
-                                    </button>
-                                  );
-                                })}
+                            <div className="space-y-2">
+                              <div className="flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden h-9 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                                <div className="pl-3 text-gray-400"><BiCalendar size={16} /></div>
+                                <input
+                                  type="date"
+                                  value={coluna.dataInspecao}
+                                  onChange={(e) => setColunasTransporte(prev => prev.map((c: any) => c.id === coluna.id ? { ...c, dataInspecao: e.target.value } : c))}
+                                  className="w-full h-full px-2 text-xs font-medium text-gray-700 outline-none bg-transparent"
+                                />
+                              </div>
+                              <div className="flex items-center bg-white border border-gray-200 rounded-lg overflow-hidden h-9 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+                                <div className="pl-3 text-gray-400"><FaTruck size={14} /></div>
+                                <input
+                                  type="text"
+                                  placeholder="PLACA (Ex: ABC-1234)"
+                                  value={coluna.placa}
+                                  onChange={(e) => setColunasTransporte(prev => prev.map((c: any) => c.id === coluna.id ? { ...c, placa: e.target.value.toUpperCase() } : c))}
+                                  className="w-full h-full px-2 text-xs font-bold text-gray-700 outline-none uppercase bg-transparent"
+                                />
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
 
-                      {/* Linha 3: Observações (destacada) + Responsável */}
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Observações</label>
-                          <div className="bg-blue-50/70 rounded-xl border border-blue-200 p-3 shadow-sm">
+                    <tbody className="divide-y divide-gray-100">
+                      {ITENS_SEGURANCA_TRANSPORTE.map((itemPadrao: any, idxItem: number) => (
+                        <tr key={idxItem} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="py-3 px-5 text-gray-700 font-medium text-xs sticky left-0 bg-white z-10 border-r border-gray-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                            <div className="flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-300 shrink-0"></span>
+                              {typeof itemPadrao === "string" ? itemPadrao : itemPadrao.item}
+                            </div>
+                          </td>
+
+                          {colunasTransporte.map((coluna: any) => {
+                            const conformeStatus = coluna.itens[idxItem]?.conforme;
+                            return (
+                              <td key={coluna.id} className="p-3 border-r border-gray-200 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => setColunasTransporte(prev => prev.map((c: any) => c.id === coluna.id ? { ...c, itens: c.itens.map((it: any, i: number) => i === idxItem ? { ...it, conforme: conformeStatus === true ? null : true } : it) } : c))}
+                                    className={`w-[45%] py-2 rounded-lg text-xs font-black transition-all border ${conformeStatus === true
+                                      ? "bg-emerald-500 text-white border-emerald-500 shadow-md"
+                                      : "bg-gray-50 text-gray-400 border-gray-200 hover:border-emerald-300 hover:bg-emerald-50"
+                                      }`}
+                                  >
+                                    SIM
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setColunasTransporte(prev => prev.map((c: any) => c.id === coluna.id ? { ...c, itens: c.itens.map((it: any, i: number) => i === idxItem ? { ...it, conforme: conformeStatus === false ? null : false } : it) } : c))}
+                                    className={`w-[45%] py-2 rounded-lg text-xs font-black transition-all border ${conformeStatus === false
+                                      ? "bg-rose-500 text-white border-rose-500 shadow-md"
+                                      : "bg-gray-50 text-gray-400 border-gray-200 hover:border-rose-300 hover:bg-rose-50"
+                                      }`}
+                                  >
+                                    NÃO
+                                  </button>
+                                </div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+
+                      <tr className="bg-amber-50/30">
+                        <td className="py-4 px-5 font-black text-amber-700 text-[11px] uppercase tracking-wider sticky left-0 bg-amber-50/90 z-10 border-r border-gray-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                          <div className="flex items-center gap-2"><BiError size={16} /> Observação</div>
+                        </td>
+                        {colunasTransporte.map((coluna: any) => (
+                          <td key={`obs-${coluna.id}`} className="p-3 border-r border-gray-200 align-top">
                             <textarea
-                              rows={3}
-                              placeholder="Notas importantes sobre a inspeção..."
-                              value={p.obs}
-                              onChange={(e) => updatePackaging(idx, 'obs', e.target.value)}
-                              className="w-full border border-blue-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 resize-none bg-white/80"
+                              value={coluna.observacaoGeral}
+                              onChange={(e) => setColunasTransporte(prev => prev.map((c: any) => c.id === coluna.id ? { ...c, observacaoGeral: e.target.value } : c))}
+                              placeholder="Observações do veículo..."
+                              className="w-full h-16 border border-amber-200 rounded-lg p-2 text-xs outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 bg-white resize-none"
                             />
-                            <p className="text-[10px] text-blue-500/70 mt-1 italic">
-                              Inclua detalhes sobre não conformidades ou observações gerais.
-                            </p>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-black text-gray-500 uppercase tracking-wider mb-1">Responsável (Assinatura)</label>
-                          <div className="border border-gray-300 rounded-lg bg-white min-h-11 flex items-center p-1">
-                            <SignatureSelector
-                              value={p.responsavel}
-                              onChange={(v) => updatePackaging(idx, 'responsavel', v)}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                          </td>
+                        ))}
+                      </tr>
 
-              {/* Caso não haja registros (nunca vai acontecer, mas deixamos por segurança) */}
-              {packagingLogs.length === 0 && (
-                <div className="text-center py-12 text-gray-400">
-                  <BiPackage size={40} className="mx-auto mb-3 opacity-30" />
-                  <p className="font-medium">Nenhum registro de embalagem ainda.</p>
-                  <p className="text-sm">Clique em "Novo Registro" para começar.</p>
+                      <tr className="bg-rose-50/30">
+                        <td className="py-4 px-5 font-black text-rose-700 text-[11px] uppercase tracking-wider sticky left-0 bg-rose-50/90 z-10 border-r border-gray-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                          <div className="flex items-center gap-2"><BiError size={16} /> Ação Corretiva</div>
+                        </td>
+                        {colunasTransporte.map((coluna: any) => (
+                          <td key={`acao-${coluna.id}`} className="p-3 border-r border-gray-200 align-top">
+                            <textarea
+                              value={coluna.acaoCorretivaGeral}
+                              onChange={(e) => setColunasTransporte(prev => prev.map((c: any) => c.id === coluna.id ? { ...c, acaoCorretivaGeral: e.target.value } : c))}
+                              placeholder="O que foi feito em caso de NC..."
+                              className="w-full h-16 border border-rose-200 rounded-lg p-2 text-xs outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500 bg-white resize-none"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="bg-slate-50">
+                        <td className="py-4 px-5 font-black text-gray-600 text-[11px] uppercase tracking-wider sticky left-0 bg-slate-50 z-10 border-r border-gray-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
+                          <div className="flex items-center gap-2"><BiUser size={16} /> Responsável</div>
+                        </td>
+                        {colunasTransporte.map((coluna: any) => (
+                          <td key={`ass-${coluna.id}`} className="p-3 border-r border-gray-200 align-middle">
+                            <div className="bg-white border border-gray-200 rounded-lg p-1">
+                              <SignatureSelector
+                                value={coluna.responsavel}
+                                onChange={(val) => setColunasTransporte(prev => prev.map((c: any) => c.id === coluna.id ? { ...c, responsavel: val } : c))}
+                              />
+                            </div>
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
-          {/* ================= ABA 5: OBJETOS ESTRANHOS ================= */}
+          {/* ================= ABA 3: OBJETOS ESTRANHOS ================= */}
           {activeTab === "objetos_estranhos" && (
             <div className="space-y-4 animate-fade-in">
               <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -664,135 +668,45 @@ export default function InspecaoPage() {
               </div>
             </div>
           )}
-
-          {/* ================= ABA 4: MATERIAIS DE LIMPEZA ================= */}
-          {activeTab === "limpeza" && (
-            <div className="space-y-6 animate-fade-in">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                {/* Cabeçalho Ciano */}
-                <div className="p-5 sm:p-6 bg-cyan-50/80 border-b border-cyan-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-cyan-100 text-cyan-600 rounded-xl flex items-center justify-center border border-cyan-200/50 shadow-sm">
-                      <BiWater size={24} />
-                    </div>
-                    <div>
-                      {/* Título dinâmico: mostra o produto da 1ª linha ou o texto padrão */}
-                      <h2 className="font-black text-gray-800 text-xl tracking-tight">
-                        {currentCleaningLogs[0]?.product || "Materiais de Limpeza"}
-                      </h2>
-                      <p className="text-sm font-medium text-cyan-600 mt-0.5">
-                        Planilha de inspeção de entrada de insumos
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={addCleaningRow}
-                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-bold text-sm shadow-md active:scale-95 transition-all"
-                  >
-                    <BiPlus size={18} /> Novo Registro
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="min-w-250 w-full text-sm border-collapse">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr className="text-[10px] lg:text-[11px] uppercase tracking-widest text-gray-600 font-black leading-tight">
-                        <th className="p-3 text-left w-32">Data</th>
-                        <th className="p-3 text-left w-48">Produto</th>
-                        <th className="p-3 text-center w-24">Produto Correto?</th>
-                        <th className="p-3 text-center w-24">Composição. OK?</th>
-                        <th className="p-3 text-center w-24">Embalagem. OK?</th>
-                        <th className="p-3 text-center w-24">Padrão Exigido?</th>
-                        <th className="p-3 text-center w-24">Cumpre com as exigências?</th>
-                        <th className="p-3 text-left w-48">Resp. Recebimento</th>
-                        <th className="p-3 w-12 text-center">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {currentCleaningLogs.length === 0 ? (
-                        <tr>
-                          <td colSpan={9} className="p-8 text-center text-gray-400 font-medium">
-                            Nenhum registro preenchido. Clique em &quot;Novo Registro&quot;.
-                          </td>
-                        </tr>
-                      ) : (
-                        currentCleaningLogs.map((log) => (
-                          <tr key={log.id} className="hover:bg-cyan-50/30 transition-colors group">
-                            <td className="p-2">
-                              <input type="date" value={log.date} onChange={(e) => updateCleaning(log.id, 'date', e.target.value)} className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-cyan-400 shadow-sm" />
-                            </td>
-
-                            {/* SELECT DE PRODUTOS */}
-                            <td className="p-2">
-                              <select
-                                value={log.product || ""}
-                                onChange={(e) => updateCleaning(log.id, 'product', e.target.value)}
-                                className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-[11px] outline-none focus:border-cyan-400 bg-white"
-                              >
-                                <option value="">Selecione...</option>
-                                {PRODUTOS_LIMPEZA.map((p) => (
-                                  <option key={p} value={p}>{p}</option>
-                                ))}
-                              </select>
-                            </td>
-
-                            {/* Colunas Sim/Não */}
-                            {(['produtoCorreto', 'composicaoOk', 'embalagemOk', 'padraoExigido', 'cumprePedido'] as const).map(field => (
-                              <td key={field} className="p-2">
-                                <div className="flex items-center justify-center gap-2">
-                                  {(['Sim', 'Não'] as const).map(opt => {
-                                    const isSelected = log[field] === opt; // Verifica se este botão já está selecionado
-
-                                    return (
-                                      <button
-                                        key={opt}
-                                        type="button"
-                                        // 🟢 A MÁGICA ACONTECE AQUI: Se já estiver selecionado, passa null (desmarca). Senão, passa a opção ('Sim' ou 'Não')
-                                        onClick={() => updateCleaning(log.id, field, isSelected ? null : opt)}
-                                        className={`px-2 py-1 rounded font-black text-[10px] transition-all ${isSelected
-                                          ? (opt === 'Sim' ? 'bg-cyan-600 text-white shadow' : 'bg-red-500 text-white shadow')
-                                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                                          }`}
-                                      >
-                                        {opt}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </td>
-                            ))}
-                            <td className="p-2">
-                              <SignatureSelector value={log.responsavel} onChange={(v) => updateCleaning(log.id, 'responsavel', v)} />
-                            </td>
-                            <td className="p-2 text-center">
-                              <button type="button" onClick={() => removeCleaningRow(log.id)} className="text-gray-300 hover:text-red-500 transition-colors p-1.5">
-                                <BiTrash size={18} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <p className="text-[10px] text-gray-400 text-center italic md:hidden py-2 tracking-widest uppercase">Deslize a tabela para o lado para preencher assinatura ↔️</p>
-            </div>
-          )}
         </div>
 
-        {/* BOTÃO EXPORTAR PERFEITO E CORRIGIDO */}
+        {/* BOTÃO EXPORTAR */}
         <div className="p-4 sm:p-6 bg-white border-t border-gray-200 flex justify-end">
           <button
             type="button"
             onClick={async () => {
-              // 🟢 Chamando a função direta (sem controller.) desestruturada do hook
-              await exportarExcel(activeTab === "objetos_estranhos" ? activeForeignSector : undefined);
+              const segurancaData = activeTab === "transporte" ? {
+                logs: colunasTransporte[0]?.itens || [],
+                metadados: {
+                  dataInspecao: colunasTransporte[0]?.dataInspecao,
+                  responsavel: colunasTransporte[0]?.responsavel,
+                  placa: colunasTransporte[0]?.placa
+                },
+                todasColunas: colunasTransporte
+              } as any : undefined;
 
-              // Limpa a chave do LocalStorage direto no clique
+              await exportarExcel(
+                activeTab === "objetos_estranhos" ? activeForeignSector : undefined,
+                segurancaData
+              );
+
               localStorage.removeItem("gv_inspecao_v11");
+              localStorage.removeItem("seguranca_transporte_colunas");
+
+              setColunasTransporte([{
+                id: Date.now(),
+                dataInspecao: "",
+                placa: "",
+                responsavel: null,
+                itens: ITENS_SEGURANCA_TRANSPORTE.map((textoItem: any) => ({
+                  item: typeof textoItem === "string" ? textoItem : textoItem.item,
+                  conforme: null,
+                  observacao: "",
+                  acaoCorretiva: ""
+                })),
+                observacaoGeral: "",
+                acaoCorretivaGeral: ""
+              }]);
             }}
             className="flex items-center gap-2 bg-green-600 text-white hover:bg-green-700 px-5 py-2.5 rounded-xl font-bold transition-all shadow-md active:scale-95 text-sm"
           >
@@ -800,7 +714,7 @@ export default function InspecaoPage() {
           </button>
         </div>
 
-        {/* RODAPÉ PROFISSIONAL */}
+        {/* RODAPÉ */}
         <div className="p-6 bg-gray-50 border-t border-gray-200">
           <div className="bg-[#1a1f2e] rounded-xl p-5 md:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6 shadow-lg border border-gray-800">
             <div>

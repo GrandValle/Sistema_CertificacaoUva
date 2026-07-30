@@ -106,7 +106,7 @@ export default function QuestionarioPage() {
                         </div>
                         <div className="text-center">
                             <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 leading-none">PHU-038</p>
-                            <h1 className="text-base font-black uppercase tracking-wide leading-tight">Visitor's Health Questionnaire</h1>
+                            <h1 className="text-base font-black uppercase tracking-wide leading-tight">Visitor&apos;s Health Questionnaire</h1>
                             <p className="text-gray-400 text-[10px]">Questionário de Saúde de Visitas</p>
                         </div>
                         <div className="text-right text-[10px] font-medium text-gray-400 hidden sm:block">

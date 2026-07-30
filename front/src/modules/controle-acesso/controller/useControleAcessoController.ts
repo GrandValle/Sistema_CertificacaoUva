@@ -95,13 +95,14 @@ export function useControleAcessoController() {
 
             // Passo 2: Preparar os dados para o Banco de Dados
             const agora = new Date();
+            const mesAtualLocal = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
             const dadosDoBanco = {
                 popCode: "PHU-041", // Código PHU específico do Controle de Acesso
                 titulo: "Controle de Acesso", // Nome fixo da tela
-                mes: agora.toISOString().slice(0, 7), // Fica no formato "2026-05"
+                mes: mesAtualLocal,
                 setor: setor || "Não informado",
-                revisadoPor: "Sistema", // Sempre 'Sistema' no Procedimento Operacional
-                registrosAcesso: registros // Passamos os registros da tabela
+                revisadoPor: "Sistema",
+                registrosAcesso: registros
             };
 
             // Passo 3: Enviar tudo para o Back-end

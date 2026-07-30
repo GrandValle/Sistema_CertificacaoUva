@@ -1,14 +1,11 @@
 "use client";
 
-export const dynamic = "force-dynamic";
-
 import { useSearchParams } from "next/navigation";
 import { HistoricTable } from "../../../components/HistoricTable";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
 import { BiArrowBack } from "react-icons/bi";
 import { AREAS_DATA } from "../../../modules/higienizacao-geral/model/higienizacaoGeral";
-// Funções importadas do seu arquivo api.ts
 import { obterHistorico, getUrlDownload, deletarRegistro } from "../../../services/api";
 
 interface HistoricColumn {
@@ -42,7 +39,9 @@ function HistoricoPageContent() {
     const [loading, setLoading] = useState(true);
     const [refreshKey, setRefreshKey] = useState(0);
 
-    const higienizacaoAreas = AREAS_DATA.map((area) => area.nome);
+    // 🔥 Trava de segurança para impedir o Loop da API
+    const fetchLock = useRef<string | null>(null);
+
     const backendTipoTela = BACKEND_ROUTES_MAP[moduleType] || moduleType;
 
     const renderIdShort = (val: string | number) => {
@@ -54,17 +53,34 @@ function HistoricoPageContent() {
         );
     };
 
+    const renderDateTime = (val: string) => {
+        const date = new Date(val);
+        if (Number.isNaN(date.getTime())) return "-";
+
+        return date.toLocaleString("pt-BR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    };
+
     useEffect(() => {
+        // Gera uma chave única baseada no estado atual
+        const currentLock = `${backendTipoTela}-${refreshKey}`;
+
+        // Se já buscamos ESTA mesma configuração, nós bloqueamos a execução e matamos o loop!
+        if (fetchLock.current === currentLock) return;
+        fetchLock.current = currentLock;
+
         const carregarHistorico = async () => {
             setLoading(true);
             try {
-                // Usando a função do seu api.ts
                 const data = await obterHistorico(backendTipoTela);
 
                 const normalized = data.map((record: any) => {
-                    // Acessa o primeiro item do array 'arquivos' (se existir)
                     const arquivo = record.documentos?.[0];
-
                     const aba = String(record.aba || "").trim();
                     const setor = String(record.setor || "").trim();
                     const areaBase = record.setor || record.area || record.tipo || record.aba || "-";
@@ -84,7 +100,6 @@ function HistoricoPageContent() {
                         frequencia: record.frequencia || "-",
                         status: String(record.status || "completo").toLowerCase(),
                         exportedAt: arquivo?.criadoEm || record.createdAt || new Date().toISOString(),
-                        // O ID do arquivo precisa ser pego corretamente
                         arquivoId: arquivo?.id,
                         fileName: arquivo?.nomeArquivo
                     };
@@ -93,165 +108,178 @@ function HistoricoPageContent() {
                 setHistorico(normalized);
             } catch (error) {
                 console.error("Erro ao carregar histórico:", error);
+                // Em caso de erro grave, limpamos a trava para permitir que o usuário tente de novo
+                fetchLock.current = null;
             } finally {
                 setLoading(false);
             }
         };
 
         carregarHistorico();
-    }, [backendTipoTela, refreshKey]);
+    }, [backendTipoTela, moduleType, refreshKey]);
 
-    const moduleConfig: Record<string, any> = {
-        higienizacao: {
-            title: "Histórico de Higienização Geral",
-            description: "Consulte as exportações individuais por área e baixe as planilhas geradas.",
-            backLink: "/higienizacao-geral",
-            backText: "Voltar para Higienização",
-            customFilter: { name: "Áreas", key: "area", values: higienizacaoAreas },
-            columns: [
-                { key: "id", label: "ID", render: renderIdShort },
-                { key: "mes", label: "Mês / Ano" },
-                { key: "area", label: "Área (Setor)" },
-                { key: "exportedAt", label: "Exportado em", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") },
-                {
-                    key: "status", label: "Status",
-                    render: (val: string) => (
-                        <span className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest font-black ${val === "completo"
-                            ? "bg-green-100 text-green-800 border border-green-200"
-                            : val === "incompleto"
-                                ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                : "bg-slate-100 text-slate-600 border border-slate-200"
-                            }`}>
-                            {val === "completo" ? "Completo" : "Incompleto"}
-                        </span>
-                    ),
-                },
-            ] as HistoricColumn[],
-        },
-        acesso: {
-            title: "Histórico de Acesso",
-            description: "Consulte o histórico diário da portaria e controle de segurança.",
-            backLink: "/controle-acesso",
-            backText: "Voltar para Acesso",
-            customFilter: null,
-            columns: [
-                { key: "id", label: "ID", render: renderIdShort },
-                { key: "mes", label: "Mês / Ano" },
-                { key: "area", label: "Setor" },
-                { key: "exportedAt", label: "Exportado em", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") }
-            ] as HistoricColumn[],
-        },
-        manutencao: {
-            title: "Histórico de Manutenção",
-            description: "Consulte todos os registros de manutenção realizados.",
-            backLink: "/manutencao-calibracao",
-            backText: "Voltar para Manutenção",
-            customFilter: {
-                name: "Área",
-                key: "area",
-                values: ["Checklist Semanal", "Checklist Mensal", "Reparos e Manutenções", "Aferição de Balanças"],
-            },
-            columns: [
-                { key: "id", label: "ID", render: renderIdShort },
-                { key: "mes", label: "Mês / Ano" },
-                { key: "area", label: "Área" },
-                { key: "frequencia", label: "Frequência" },
-                { key: "exportedAt", label: "Exportado em", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") },
-            ] as HistoricColumn[],
-        },
-        conduta: {
-            title: "Histórico de Conduta e Higiene",
-            description: "Consulte o histórico de registros de conduta e lavagem.",
-            backLink: "/conduta-higiene",
-            backText: "Voltar para Conduta",
-            customFilter: { name: "Áreas", key: "area", values: ["Checklist", "Lavagem"] },
-            columns: [
-                { key: "id", label: "ID", render: renderIdShort },
-                { key: "mes", label: "Semana" },
-                { key: "area", label: "Aba" },
-                { key: "exportedAt", label: "Exportado em", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") },
-            ] as HistoricColumn[],
-        },
-        qualidade: {
-            title: "Histórico de Controle de Qualidade",
-            description: "Consulte os registros de qualidade e rejeitos.",
-            backLink: "/controle-qualidade",
-            backText: "Voltar para Qualidade",
-            customFilter: { name: "Áreas", key: "area", values: ["Vidros", "Pragas", "Inusuais", "Rejeitos"] },
-            columns: [
-                { key: "id", label: "ID", render: renderIdShort },
-                { key: "mes", label: "Mês / Ano" },
-                { key: "area", label: "Aba" },
-                { key: "exportedAt", label: "Exportado em", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") },
-                {
-                    key: "status", label: "Status",
-                    render: (val: string) => (
-                        <span className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest font-black ${val === "completo"
-                            ? "bg-green-100 text-green-800 border border-green-200"
-                            : val === "parcial"
-                                ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                : "bg-slate-100 text-slate-600 border border-slate-200"
-                            }`}>
-                            {val === "completo" ? "Completo" : val === "parcial" ? "Parcial" : "Pendente"}
-                        </span>
-                    ),
-                },
-            ] as HistoricColumn[],
-        },
-        estoque: {
-            title: "Histórico do Estoque e Materiais",
-            description: "Consulte o histórico de movimentações de estoque.",
-            backLink: "/estoque-materiais",
-            backText: "Voltar para Estoque e Materiais",
-            customFilter: { name: "Áreas", key: "area", values: ["Estoque", "Tesouras", "Óculos"] },
-            columns: [
-                { key: "id", label: "ID", render: renderIdShort },
-                { key: "mes", label: "Mês / Ano" },
-                { key: "area", label: "Área" },
-                { key: "exportedAt", label: "Exportado em", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") },
-            ] as HistoricColumn[],
-        },
-        inspecao: {
-            title: "Histórico de Inspeção",
-            description: "Consulte os registros de inspeção realizados.",
-            backLink: "/inspecao",
-            backText: "Voltar para Inspeção",
-            customFilter: {
-                name: "Áreas",
-                key: "area",
-                values: [
-                    "Pré-Inspeção",
-                    "Transporte",
-                    "Embalagem",
-                    "Limpeza",
-                    "Objetos Estranhos",
-                    "Objetos Estranhos - Recepção da fruta",
-                    "Objetos Estranhos - Área de embalagem"
-                ]
-            },
-            columns: [
-                { key: "id", label: "ID", render: renderIdShort },
-                { key: "mes", label: "Mês / Ano" },
-                { key: "area", label: "Área" },
-                { key: "exportedAt", label: "Exportado em", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") },
-            ] as HistoricColumn[],
-        },
-        visitantes: {
-            title: "Histórico de Visitantes (PHU-038)",
-            description: "Consulte os questionários de saúde assinados pelos visitantes.",
-            backLink: "/questionario-visitantes",
-            backText: "Voltar para o Questionário",
-            customFilter: null, // Deixamos nulo pois não tem "Área"
-            columns: [
-                { key: "id", label: "ID", render: renderIdShort },
-                { key: "exportedAt", label: "Data de Cadastro", render: (val: string) => new Date(val).toLocaleDateString("pt-BR") },
-                { key: "nome", label: "Nome do Visitante", render: (val: string) => val || "Não informado" },
-                { key: "empresa", label: "Empresa", render: (val: string) => val || "-" }
-            ] as HistoricColumn[],
-        },
-    };
+    // 🔥 MEMOIZANDO AS CONFIGURAÇÕES (Evita que o React recrie esse objeto gigante à toa)
+    const config = useMemo(() => {
+        const higienizacaoAreas = AREAS_DATA.map((area) => area.nome);
 
-    const config = moduleConfig[moduleType] || moduleConfig.higienizacao;
+        const configMap: Record<string, any> = {
+            higienizacao: {
+                title: "Histórico de Higienização Geral",
+                description: "Consulte as exportações individuais por área e baixe as planilhas geradas.",
+                backLink: "/higienizacao-geral",
+                backText: "Voltar para Higienização",
+                customFilter: { name: "Áreas", key: "area", values: higienizacaoAreas },
+                columns: [
+                    { key: "id", label: "ID", render: renderIdShort },
+                    { key: "mes", label: "Mês / Ano" },
+                    { key: "area", label: "Área (Setor)" },
+                    { key: "exportedAt", label: "Exportado em", render: renderDateTime },
+                    {
+                        key: "status", label: "Status",
+                        render: (val: string) => (
+                            <span className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest font-black ${val === "completo"
+                                ? "bg-green-100 text-green-800 border border-green-200"
+                                : val === "incompleto"
+                                    ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                                }`}>
+                                {val === "completo" ? "Completo" : "Incompleto"}
+                            </span>
+                        ),
+                    },
+                ] as HistoricColumn[],
+            },
+            acesso: {
+                title: "Histórico de Acesso",
+                description: "Consulte o histórico diário da portaria e controle de segurança.",
+                backLink: "/controle-acesso",
+                backText: "Voltar para Acesso",
+                customFilter: null,
+                columns: [
+                    { key: "id", label: "ID", render: renderIdShort },
+                    { key: "mes", label: "Mês / Ano" },
+                    { key: "area", label: "Setor" },
+                    { key: "exportedAt", label: "Exportado em", render: renderDateTime }
+                ] as HistoricColumn[],
+            },
+            manutencao: {
+                title: "Histórico de Manutenção",
+                description: "Consulte todos os registros de manutenção realizados.",
+                backLink: "/manutencao-calibracao",
+                backText: "Voltar para Manutenção",
+                customFilter: {
+                    name: "Área",
+                    key: "area",
+                    values: ["Checklist Semanal", "Checklist Mensal", "Reparos e Manutenções", "Aferição de Balanças"],
+                },
+                columns: [
+                    { key: "id", label: "ID", render: renderIdShort },
+                    { key: "mes", label: "Mês / Ano" },
+                    { key: "area", label: "Área" },
+                    { key: "frequencia", label: "Frequência" },
+                    { key: "exportedAt", label: "Exportado em", render: renderDateTime },
+                ] as HistoricColumn[],
+            },
+            conduta: {
+                title: "Histórico de Conduta e Higiene",
+                description: "Consulte o histórico de registros de conduta e lavagem.",
+                backLink: "/conduta-higiene",
+                backText: "Voltar para Conduta",
+                customFilter: { name: "Áreas", key: "area", values: ["Checklist", "Lavagem"] },
+                columns: [
+                    { key: "id", label: "ID", render: renderIdShort },
+                    { key: "mes", label: "Semana" },
+                    { key: "area", label: "Aba" },
+                    { key: "exportedAt", label: "Exportado em", render: renderDateTime },
+                ] as HistoricColumn[],
+            },
+            qualidade: {
+                title: "Histórico de Controle de Qualidade",
+                description: "Consulte os registros de qualidade e rejeitos.",
+                backLink: "/controle-qualidade",
+                backText: "Voltar para Qualidade",
+                customFilter: { name: "Áreas", key: "area", values: ["Vidros", "Pragas", "Inusuais", "Rejeitos"] },
+                columns: [
+                    { key: "id", label: "ID", render: renderIdShort },
+                    { key: "mes", label: "Mês / Ano" },
+                    { key: "area", label: "Aba" },
+                    { key: "exportedAt", label: "Exportado em", render: renderDateTime },
+                    {
+                        key: "status", label: "Status",
+                        render: (val: string) => (
+                            <span className={`px-3 py-1.5 rounded-lg text-[10px] uppercase tracking-widest font-black ${val === "completo"
+                                ? "bg-green-100 text-green-800 border border-green-200"
+                                : val === "parcial"
+                                    ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                                }`}>
+                                {val === "completo" ? "Completo" : val === "parcial" ? "Parcial" : "Pendente"}
+                            </span>
+                        ),
+                    },
+                ] as HistoricColumn[],
+            },
+            estoque: {
+                title: "Histórico do Estoque e Materiais",
+                description: "Consulte o histórico de movimentações de tesouras, óculos e materiais de limpeza.",
+                backLink: "/estoque-materiais",
+                backText: "Voltar para Estoque e Materiais",
+                customFilter: {
+                    name: "Áreas",
+                    key: "area",
+                    values: [
+                        "Tesouras",
+                        "Óculos",
+                        "Estoque de Material de Limpeza",
+                        "Inspeção de Material de Limpeza"
+                    ]
+                },
+                columns: [
+                    { key: "id", label: "ID", render: renderIdShort },
+                    { key: "mes", label: "Mês / Ano" },
+                    { key: "area", label: "Área" },
+                    { key: "exportedAt", label: "Exportado em", render: renderDateTime },
+                ] as HistoricColumn[],
+            },
+            inspecao: {
+                title: "Histórico de Inspeção",
+                description: "Consulte os registros de inspeção realizados.",
+                backLink: "/inspecao",
+                backText: "Voltar para Inspeção",
+                customFilter: {
+                    name: "Áreas",
+                    key: "area",
+                    values: [
+                        "Pré-Inspeção",
+                        "Objetos Estranhos",
+                        "Objetos Estranhos - Recepção da fruta",
+                        "Objetos Estranhos - Área de embalagem"
+                    ]
+                },
+                columns: [
+                    { key: "id", label: "ID", render: renderIdShort },
+                    { key: "mes", label: "Mês / Ano" },
+                    { key: "area", label: "Área" },
+                    { key: "exportedAt", label: "Exportado em", render: renderDateTime },
+                ] as HistoricColumn[],
+            },
+            visitantes: {
+                title: "Histórico de Visitantes (PHU-038)",
+                description: "Consulte os questionários de saúde assinados pelos visitantes.",
+                backLink: "/questionario-visitantes",
+                backText: "Voltar para o Questionário",
+                customFilter: null,
+                columns: [
+                    { key: "id", label: "ID", render: renderIdShort },
+                    { key: "exportedAt", label: "Data e horário de cadastro", render: renderDateTime },
+                    { key: "nome", label: "Nome do Visitante", render: (val: string) => val || "Não informado" },
+                    { key: "empresa", label: "Empresa", render: (val: string) => val || "-" }
+                ] as HistoricColumn[],
+            },
+        };
+
+        return configMap[moduleType] || configMap.higienizacao;
+    }, [moduleType]);
 
     const handleExport = async (record: any) => {
         if (!record.arquivoId) {
@@ -260,7 +288,6 @@ function HistoricoPageContent() {
         }
 
         try {
-            // Usando a URL que vem da função utilitária
             const urlDownload = getUrlDownload(record.arquivoId);
             const response = await fetch(urlDownload);
 
@@ -289,7 +316,6 @@ function HistoricoPageContent() {
         if (!confirmar) return;
 
         try {
-            // Chamando a função de delete do seu api.ts
             await deletarRegistro(backendTipoTela, id);
             setRefreshKey(prev => prev + 1);
         } catch (error) {
@@ -329,7 +355,7 @@ function HistoricoPageContent() {
 
 export default function HistoricoRoutePage() {
     return (
-        <Suspense fallback={<div className="min-h-screen bg-slate-100 p-4 md:p-6 font-sans" />}>
+        <Suspense fallback={<div className="min-h-screen bg-slate-100 p-4 md:p-6 font-sans flex items-center justify-center"><p className="text-slate-500 font-bold">Aguardando roteamento...</p></div>}>
             <HistoricoPageContent />
         </Suspense>
     );

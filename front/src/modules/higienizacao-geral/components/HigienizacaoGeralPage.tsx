@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { BiHistory, BiSearch, BiPlus, BiCube, BiNote, BiWater, BiCalendar, BiTime, BiDownload, BiTrash } from "react-icons/bi";
 import { SignatureSelector } from "../../../components/SignatureSelector";
@@ -12,6 +12,12 @@ import {
 } from "../model/higienizacaoGeral";
 
 export default function HigienizacaoGeralPage() {
+    // 🔥 CORREÇÃO: Controle de montagem para evitar hidratação
+    const [isMounted, setIsMounted] = useState(false);
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
     const controller = useHigienizacaoController();
     const {
         currentTab, setCurrentTab,
@@ -46,6 +52,13 @@ export default function HigienizacaoGeralPage() {
         const nextStatus = currentStatus === clickedStatus ? '' : clickedStatus;
         updateField(idx, 'status', nextStatus);
     };
+
+    // 🔥 Enquanto não montado, retorna um placeholder ou null
+    if (!isMounted) {
+        return <div className="min-h-screen bg-gray-50 p-4 lg:p-8 flex items-center justify-center">
+            <div className="text-gray-500">Carregando...</div>
+        </div>;
+    }
 
     if (!activeArea) {
         return <div className="p-8 text-center text-red-600">Área não encontrada. Selecione uma área válida na barra lateral.</div>;
@@ -117,34 +130,43 @@ export default function HigienizacaoGeralPage() {
                                 </div>
                             </div>
                             <div className="overflow-y-auto p-2 scrollbar-thin" style={{ maxHeight: 450 }}>
-                                {filteredAreas.map((a: AreaPreenchimento) => {
-                                    const freqType = extractFrequencyType(a.freq);
-                                    const categoryColor = CATEGORIES.find((c: any) => c.id === a.category)?.color || "bg-gray-100 text-gray-800";
-                                    const freqColorBase = FREQUENCIES.find((f: any) => f.id === freqType)?.color || "bg-gray-100 text-gray-800";
-                                    const isAtiva = currentTab === a.id;
-                                    const corNome = freqColorBase.split('-')[1];
-                                    const freqColor = isAtiva ? `bg-${corNome}-600 text-white shadow-sm ring-1 ring-white/30` : freqColorBase;
-                                    return (
-                                        <button key={a.id} onClick={() => setCurrentTab(a.id)} className={`w-full text-left p-3 rounded-lg mb-2 transition-all duration-200 ${isAtiva ? "bg-blue-600 text-white shadow border-blue-500" : "hover:bg-gray-50 border border-transparent hover:border-gray-200 text-gray-700"}`}>
-                                            <div className="flex justify-between items-start">
-                                                <span className="font-medium text-sm">{a.nome.toUpperCase()}</span>
-                                                {isAtiva && <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">Ativo</span>}
-                                            </div>
-                                            <div className="flex justify-between items-center mt-2">
-                                                <span className={`text-xs px-2 py-0.5 rounded-full ${isAtiva ? "bg-white/20 text-white" : categoryColor}`}>{a.category}</span>
+                                {filteredAreas
+                                    .filter((a: AreaPreenchimento) => a.id !== 'lavagem_ref') // 🔥 Oculta o refugo da barra lateral para parecer um único botão unificado
+                                    .map((a: AreaPreenchimento) => {
+                                        // Renomeia o texto do botão na barra lateral para ficar limpo
+                                        const nomeExibicao = a.id === 'lavagem_proc' ? 'Lavagem de Contentores' : a.nome;
+
+                                        const freqType = extractFrequencyType(a.freq);
+                                        const categoryColor = CATEGORIES.find((c: any) => c.id === a.category)?.color || "bg-gray-100 text-gray-800";
+                                        const freqColorBase = FREQUENCIES.find((f: any) => f.id === freqType)?.color || "bg-gray-100 text-gray-800";
+
+                                        // Mantém ativo tanto se estiver em proc quanto em refugo
+                                        const isAtiva = currentTab === a.id || (a.id === 'lavagem_proc' && currentTab === 'lavagem_ref');
+
+                                        const corNome = freqColorBase.split('-')[1];
+                                        const freqColor = isAtiva ? `bg-${corNome}-600 text-white shadow-sm ring-1 ring-white/30` : freqColorBase;
+
+                                        return (
+                                            <button key={a.id} onClick={() => setCurrentTab(a.id === 'lavagem_proc' ? 'lavagem_proc' : a.id)} className={`w-full text-left p-3 rounded-lg mb-2 transition-all duration-200 ${isAtiva ? "bg-blue-600 text-white shadow border-blue-500" : "hover:bg-gray-50 border border-transparent hover:border-gray-200 text-gray-700"}`}>
+                                                <div className="flex justify-between items-start">
+                                                    <span className="font-medium text-sm">{nomeExibicao.toUpperCase()}</span>
+                                                    {isAtiva && <span className="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">Ativo</span>}
+                                                </div>
+                                                <div className="flex justify-between items-center mt-2">
+                                                    <span className={`text-xs px-2 py-0.5 rounded-full ${isAtiva ? "bg-white/20 text-white" : categoryColor}`}>{a.category}</span>
+                                                    {a.id !== 'bebedouros' && (
+                                                        <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${freqColor}`}>{freqType.charAt(0)}</span>
+                                                    )}
+                                                </div>
                                                 {a.id !== 'bebedouros' && (
-                                                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${freqColor}`}>{freqType.charAt(0)}</span>
+                                                    <div className={`mt-2 text-[10px] italic flex items-center gap-1 ${isAtiva ? "text-blue-200" : "text-gray-500"}`}>{a.freq}</div>
                                                 )}
-                                            </div>
-                                            {a.id !== 'bebedouros' && (
-                                                <div className={`mt-2 text-[10px] italic flex items-center gap-1 ${isAtiva ? "text-blue-200" : "text-gray-500"}`}>{a.freq}</div>
-                                            )}
-                                        </button>
-                                    );
-                                })}
+                                            </button>
+                                        );
+                                    })}
                             </div>
 
-                            {/* PRODUTOS / INSTRUÇÕES DE USO (Apenas isso ficou da legenda) */}
+                            {/* PRODUTOS / INSTRUÇÕES DE USO */}
                             <div className="bg-white rounded-2xl shadow-2xl p-5 border border-gray-100 mt-4">
                                 <div className="pt-2">
                                     <div className="flex items-center gap-2 mb-3">
@@ -189,6 +211,33 @@ export default function HigienizacaoGeralPage() {
                     <main className="flex-1 min-w-0">
                         <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100 mb-6 transition-all duration-300">
                             <div className="bg-gray-50 p-5 border-b border-gray-100">
+
+                                {/* 🔥 BOTÕES DE ALTERNÂNCIA (TOGGLE) PARA CONTENTORES */}
+                                {(currentTab === 'lavagem_proc' || currentTab === 'lavagem_ref') && (
+                                    <div className="flex items-center gap-2 mb-4 bg-gray-200/60 p-1.5 rounded-xl w-fit border border-gray-200 shadow-inner">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentTab('lavagem_proc')}
+                                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentTab === 'lavagem_proc'
+                                                ? 'bg-blue-600 text-white shadow-md'
+                                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/50'
+                                                }`}
+                                        >
+                                            Processamento
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCurrentTab('lavagem_ref')}
+                                            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${currentTab === 'lavagem_ref'
+                                                ? 'bg-blue-600 text-white shadow-md'
+                                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-300/50'
+                                                }`}
+                                        >
+                                            Refugo
+                                        </button>
+                                    </div>
+                                )}
+
                                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                     <div>
                                         <div className="flex items-center gap-3">
@@ -297,7 +346,7 @@ export default function HigienizacaoGeralPage() {
                                                         </tr>
                                                     ))}
                                                     {tesourasLogs.length === 0 && (
-                                                        <tr><td colSpan={DIAS_SEMANA_TESOURA.length * 2 + 4} className="text-center py-8 text-gray-500">Nenhuma semana cadastrada. Clique em "Nova Semana" para começar.</td></tr>
+                                                        <tr><td colSpan={DIAS_SEMANA_TESOURA.length * 2 + 4} className="text-center py-8 text-gray-500">Nenhuma semana cadastrada. Clique em &quot;Nova Semana&quot; para começar.</td></tr>
                                                     )}
                                                 </tbody>
                                             </table>
@@ -403,7 +452,6 @@ export default function HigienizacaoGeralPage() {
                                                 </tbody>
                                             </table>
                                         </div>
-                                        {/* REMOVIDO: O footer que ficava aqui com PHU e Assinatura Geral de Bebedouros foi excluído com sucesso */}
                                     </div>
                                 ) : activeArea.id === 'transporte' ? (
                                     <table className="min-w-full divide-y divide-gray-200">
@@ -413,7 +461,7 @@ export default function HigienizacaoGeralPage() {
                                                 {['Baú Limpo', 'Sem Odor', 'Livre Animais', 'Contentor Limpo'].map(h =>
                                                     <th key={h} className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">{h}</th>
                                                 )}
-                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Monitora</th>
+                                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Monitor</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-100">
@@ -445,12 +493,16 @@ export default function HigienizacaoGeralPage() {
                                                     <>
                                                         <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Status (C/NC)</th>
                                                         <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Resp. / Limpeza</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Monitora Responsavel</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Monitor Responsavel</th>
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">{activeArea.tituloProdutos || "Produtos Utilizados"}</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Assinatura</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                                            {activeArea.tituloProdutos || "Produtos Utilizados"}
+                                                        </th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                                                            {activeArea.id === 'lavagem_proc' ? 'Fiscal Responsável' : 'Assinatura'}
+                                                        </th>
                                                     </>
                                                 )}
                                                 <th className="px-4 py-2 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider w-12"></th>
@@ -536,7 +588,16 @@ export default function HigienizacaoGeralPage() {
                     <div className="p-4 md:p-5">
                         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                             <div className="flex items-center gap-4"><div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center font-bold">GV</div><div><p className="text-sm font-medium">GrandValle - Sistema de Controle de Higienização</p><p className="text-xs text-gray-300">© {new Date().getFullYear()} - Todos os direitos reservados</p></div></div>
-                            <div className="flex items-center gap-6"><div className="text-center"><p className="text-xs text-gray-300">Revisado por</p><p className="font-bold text-yellow-300">{COMPLIANCE.revisedBy}</p></div><div className="h-8 w-px bg-gray-700"></div><div className="text-center"><p className="text-xs text-gray-300">Código PHU</p><p className="font-bold text-white bg-blue-600 px-3 py-1 rounded-lg">{activeArea.doc}</p></div></div>
+                            <div className="flex items-center gap-6">
+                                <div className="text-center"><p className="text-xs text-gray-300">Revisado por</p><p className="font-bold text-yellow-300">{COMPLIANCE.revisedBy}</p></div>
+                                <div className="h-8 w-px bg-gray-700"></div>
+                                <div className="text-center">
+                                    <p className="text-xs text-gray-300">Código PHU</p>
+                                    <p className="font-bold text-white bg-blue-600 px-3 py-1 rounded-lg">
+                                        {activeArea.doc}
+                                    </p>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </footer>

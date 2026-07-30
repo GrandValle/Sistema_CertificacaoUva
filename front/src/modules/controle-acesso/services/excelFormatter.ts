@@ -110,8 +110,7 @@ export const exportControleAcessoToExcel = async ({ registros, setor, assinatura
     titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
 
     const metaRows: string[] = [
-        `Setor: ${setor || "Geral"}`,
-        `Exportado em: ${new Date().toLocaleString("pt-BR")}`
+        `Setor: ${setor || "Geral"}`
     ];
 
     metaRows.forEach(meta => {
@@ -138,7 +137,6 @@ export const exportControleAcessoToExcel = async ({ registros, setor, assinatura
     headerRow.height = 24;
     headerRow.eachCell(applyHeaderStyle);
 
-    // 🟢 FILTRO: Exporta apenas se o nome ou objetivo estiverem preenchidos
     const filledRegistros = registros.filter(reg => !!String(reg.nome || "").trim() || !!String(reg.objetivo || "").trim());
 
     for (const reg of filledRegistros) {
@@ -147,17 +145,16 @@ export const exportControleAcessoToExcel = async ({ registros, setor, assinatura
             reg.hora || "",
             reg.nome || "",
             reg.objetivo || "",
-            "", // Coluna reservada para assinatura
+            "",
             reg.horaSaida || "-",
         ]);
 
         dataRow.height = 55;
 
         dataRow.eachCell((cell, colNum) => {
-            applyDataStyle(cell, ![3, 4].includes(colNum)); // Alinha Nome e Objetivo à esquerda
+            applyDataStyle(cell, ![3, 4].includes(colNum));
         });
 
-        // Injeta assinatura de autorização na Coluna 5
         await addTableSignature(workbook, ws, reg.autorizacao || null, dataRow.number, 5, dataRow.getCell(5));
     }
 
@@ -182,7 +179,7 @@ export const exportControleAcessoToExcel = async ({ registros, setor, assinatura
         obsRow.height = 20;
     });
 
-    // --- 6. CONTROLE DE REVISÃO ---
+    // --- 6. CONTROLE DE REVISÃO (Com Código do Documento no rodapé) ---
     ws.addRow([]);
     const revTitleRow = ws.addRow(["CONTROLE DE REVISÃO DO DOCUMENTO"]);
     ws.mergeCells(revTitleRow.number, 1, revTitleRow.number, maxCol);
@@ -205,6 +202,5 @@ export const exportControleAcessoToExcel = async ({ registros, setor, assinatura
 
     // --- 7. DOWNLOAD ---
     const buffer = await workbook.xlsx.writeBuffer();
-    const dateLabel = new Date().toISOString().split("T")[0];
     return new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 };

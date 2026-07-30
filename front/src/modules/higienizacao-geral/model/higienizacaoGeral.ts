@@ -1,4 +1,4 @@
-type BaseFreq = "Diaria" | "Semanal" | "Quinzenal" | "Mensal" | "a cada 15 dias" | 'OUTRA';
+type BaseFreq = "Diaria" | "Semanal" | "Quinzenal" | "Mensal" | 'OUTRA';
 
 // Condições especiais (o espaço no começo é proposital)
 type Condicao =
@@ -107,10 +107,20 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         category: 'Limpeza Geral'
     },
     {
-        id: 'lavagem_cont',
-        nome: 'Lavagem de Contentores',
+        id: 'lavagem_proc',
+        nome: 'Contentores do Processamento',
         doc: 'PHU-002',
-        freq: 'Diaria (em dias de processamento)',
+        freq: 'Mensal',
+        tituloProdutos: 'Produtos Utilizados',
+        campo2: 'Qtd. Cont.',
+        produtos: ['AL', 'DN', 'HS'],
+        category: 'Infraestrutura'
+    },
+    {
+        id: 'lavagem_ref',
+        nome: 'Contentores do Refugo',
+        doc: 'PHU-025',
+        freq: 'Diaria',
         tituloProdutos: 'Produtos Utilizados',
         campo2: 'Qtd. Cont.',
         produtos: ['AL', 'DN', 'HS'],
@@ -147,20 +157,10 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         category: 'Processo/Máquinas'
     },
     {
-        id: 'local_lavagem',
-        nome: 'Local Lavagem Contentor',
-        doc: 'PHU-006',
-        freq: 'Semanal',
-        tituloProdutos: 'Produtos Utilizados',
-        campo2: 'Horário',
-        produtos: ['AL', 'DN', 'HS'],
-        category: 'Áreas Estruturais'
-    },
-    {
         id: 'janelas_portas',
         nome: 'Janelas e Portas',
         doc: 'PHU-007',
-        freq: 'a cada 15 dias (em dias de processamento)',
+        freq: 'Quinzenal (em dias de processamento)',
         tituloProdutos: 'Produtos Utilizados',
         campo2: 'Horário',
         produtos: ['AL', 'DN', 'HS'],
@@ -170,7 +170,7 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         id: 'teto',
         nome: 'Teto',
         doc: 'PHU-008',
-        freq: 'a cada 15 dias (em dias de processamento)',
+        freq: 'Quinzenal (em dias de processamento)',
         tituloProdutos: 'Material Utilizado',
         campo2: 'Horário',
         produtos: ['V', 'HS', 'PA'],
@@ -180,7 +180,7 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         id: 'lampadas',
         nome: 'Lâmpadas',
         doc: 'PHU-009',
-        freq: 'a cada 15 dias (em dias de processamento)',
+        freq: 'Quinzenal (em dias de processamento)',
         tituloProdutos: 'Materiais e Produtos Utilizados',
         campo2: 'Horário',
         produtos: ['PA', 'AL', 'HS'],
@@ -210,16 +210,6 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         id: 'area_refugo',
         nome: 'Área de Refugo',
         doc: 'PHU-012',
-        freq: 'Diaria (em dias de processamento)',
-        tituloProdutos: 'Produtos Utilizados',
-        campo2: 'Horário',
-        produtos: ['AL', 'DN', 'HS'],
-        category: 'Infraestrutura'
-    },
-    {
-        id: 'sala_controle',
-        nome: 'Sala de Controle',
-        doc: 'PHU-013',
         freq: 'Diaria (em dias de processamento)',
         tituloProdutos: 'Produtos Utilizados',
         campo2: 'Horário',
@@ -299,15 +289,6 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         category: 'Equipamentos'
     },
     {
-        id: 'contentores_refugo',
-        nome: 'Contentores de Refugo',
-        doc: 'PHU-025',
-        freq: 'Diaria',
-        campo2: 'Qtd. Cont.',
-        produtos: ['AL', 'DN', 'HS'],
-        category: 'Infraestrutura'
-    },
-    {
         id: 'balancas',
         nome: 'Balanças',
         doc: 'PHU-026',
@@ -331,7 +312,7 @@ export const AREAS_DATA: AreaPreenchimento[] = [
         id: 'paredes',
         nome: 'Paredes do Packing House',
         doc: 'PHU-013',
-        freq: 'a cada 15 dias (em dias de processamento)',
+        freq: 'Quinzenal (em dias de processamento)',
         campo2: 'Horário',
         produtos: ['DN', 'HS'],
         category: 'Áreas Estruturais'
@@ -396,3 +377,38 @@ export const extractFrequencyType = (freq: string): string => {
     if (upperFreq.includes('MENSAL')) return "Mensal";
     return "OUTRA";
 };
+
+// ────────────────────────────────────────────────────────────────
+// LEGENDA E INSTRUÇÕES (Exportadas para uso na UI e no Excel)
+// ────────────────────────────────────────────────────────────────
+
+export function buildBebedouroLegend(): string[] {
+    return [
+        "• SIM: Procedimento executado e aprovado.",
+        "• NÃO: Procedimento não executado ou reprovado.",
+        "",
+        "Materiais Necessários:",
+        "• Balde, Esponja, Luvas Nitrílica, Bota PVC, Óculos de Proteção.",
+        "",
+        "Diluição dos Produtos:",
+        "• Preparar solução de 50 mL de detergente neutro para 10 litros de água.",
+        "• Preparar solução de 100 mL de hipoclorito de sódio para 10 litros de água.",
+    ];
+}
+
+export function buildLegendForArea(area: AreaPreenchimento): string[] {
+    const baseLegend = [
+        "• SIM: O produto ou procedimento de limpeza foi aplicado e verificado.",
+        "• NÃO/Em branco: O produto ou procedimento não foi aplicado.",
+    ];
+    const lines = [...baseLegend, ""];
+    if (area.isMatricial) {
+        lines.push(`• PRODUTO UTILIZADO PARA HIGIENE: Água e Sanclor (Hipoclorito de sódio 20ml p/ 10L de água)`);
+    } else if (area.produtos && area.produtos.length > 0) {
+        area.produtos.forEach((sigla) => {
+            const descricao = PRODUTO_LEGENDA[sigla] || sigla;
+            lines.push(`• Sigla ${sigla}: Refere-se a "${descricao}".`);
+        });
+    }
+    return lines;
+}

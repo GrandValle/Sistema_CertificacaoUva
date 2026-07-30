@@ -32,6 +32,8 @@ export default function CondutaHigienePage() {
         toggleStatus,
         actions,
         addActionRow,
+        weekLavagem,      // 🔥 NOVO
+        setWeekLavagem,
         updateAction,
         removeActionRow,
         showStats,
@@ -47,13 +49,20 @@ export default function CondutaHigienePage() {
         toggleLavagemCell,
         removeLavagemRow,
         exportarExcel,
-        // 🔥 NOVAS PROPS DO CONTROLLER
         colaboradores,
         carregarColaboradores,
-        criarColaborador,
         atualizarColaborador,
         salvarColaborador,
         desativarColaborador,
+        observacoes,
+        updateObservacao,
+        // 🔥 ADICIONADAS AS PROPS QUE FALTAVAM
+        statusMapLavagem,
+        updateStatusLavagem,
+        observacaoGeralLavagem,
+        setObservacaoGeralLavagem,
+        updateObsLavagem,
+        deleteObsLavagem,
     } = useCondutaController();
 
     const getDocInfo = () => {
@@ -203,12 +212,16 @@ export default function CondutaHigienePage() {
                         setShowActionPlan={setShowActionPlan}
                         stats={stats}
                         docInfo={docInfo}
+                        observacoes={observacoes}
+                        updateObservacao={updateObservacao}
                     />
                 )}
 
                 {activeTab === "lavagem" && (
                     <LavagemMaos
-                        weekDays={weekDays}
+                        weekLavagem={weekLavagem}                          // 🔥 Ajustado para weekLavagem
+                        setWeekLavagem={setWeekLavagem}                    // 🔥 Ajustado para setWeekLavagem
+                        weekDays={generateWeekDays(weekLavagem)}           // 🔥 Usa a função de gerar dias baseada na semana da lavagem
                         lavagemHorarios={lavagemHorarios}
                         setLavagemHorarios={setLavagemHorarios}
                         lavagemLogs={lavagemLogs}
@@ -221,8 +234,12 @@ export default function CondutaHigienePage() {
                         atualizarColaborador={atualizarColaborador}
                         desativarColaborador={desativarColaborador}
                         salvarColaborador={salvarColaborador}
-
-
+                        statusMapLavagem={statusMapLavagem}
+                        updateStatusLavagem={updateStatusLavagem}
+                        updateObsLavagem={updateObsLavagem}
+                        deleteObsLavagem={deleteObsLavagem}
+                        observacaoGeralLavagem={observacaoGeralLavagem}
+                        setObservacaoGeralLavagem={setObservacaoGeralLavagem}
                     />
                 )}
 
@@ -272,7 +289,7 @@ export default function CondutaHigienePage() {
                                 <div className="hidden md:block h-8 w-px bg-gray-700"></div>
                                 <div className="text-center flex flex-col items-center">
                                     <p className="text-gray-400 text-[10px] sm:text-xs uppercase tracking-wider mb-1">
-                                        POP
+                                        PHU
                                     </p>
                                     <div className="px-3 py-1 bg-indigo-600/90 rounded-md border border-indigo-500/50">
                                         <span className="font-bold text-xs sm:text-sm">

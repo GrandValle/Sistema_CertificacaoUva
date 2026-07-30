@@ -5,16 +5,7 @@ export interface PreOpItem {
     category: string;
     item: string;
     checks: Record<string, "C" | "NC" | null>;
-}
-
-export interface TransportLog {
-    id: number;
-    date: string;
-    bauLimpo: "C" | "NC" | null;
-    semOdor: "C" | "NC" | null;
-    livreAnimais: "C" | "NC" | null;
-    contentorLimpo: "C" | "NC" | null;
-    monitor: string | null;
+    observacaoGeral?: string;
 }
 
 export interface ActionPlan {
@@ -38,8 +29,28 @@ export interface ForeignObjectLog {
     responsible: string | null;
 }
 
+export interface SegurancaTransporteItem {
+    id: number;
+    item: string;
+    conforme: boolean | null; // true = Conforme, false = Não Conforme
+    observacao: string;
+    acaoCorretiva: string;
+}
+
+export interface CleaningLog {
+    id: number;
+    date: string;
+    product: string;
+    produtoCorreto: "Sim" | "Não" | null;
+    composicaoOk: "Sim" | "Não" | null;
+    embalagemOk: "Sim" | "Não" | null;
+    padraoExigido: "Sim" | "Não" | null;
+    cumprePedido: "Sim" | "Não" | null;
+    responsavel: string | null;
+}
+
 // 🟢 Atualizado para cobrir as 4 telas operacionais
-export type TabType = "pre_inspecao" | "transporte" | "embalagem" | "limpeza" | "objetos_estranhos";
+export type TabType = "pre_inspecao" | "transporte" | "objetos_estranhos";
 
 export const FOREIGN_OBJECT_LOCATIONS = [
     "Recepção da fruta",
@@ -98,6 +109,29 @@ export const PRE_OP_ITEMS_DATA = Object.entries(rawData).flatMap(([category, ite
     }))
 );
 
+export const ITENS_SEGURANCA_TRANSPORTE: string[] = [
+    "Baú limpo (sem poeira, terra ou resíduos)",
+    "Ausência de odores estranhos",
+    "Livre de vestígios de fezes ou presença de animais",
+    "Piso íntegro e higienizado e sem compartimento oculto",
+    "Paredes e teto sem avarias e frestas",
+    "Pallets limpos e em bom estado",
+    "Porta com vedação adequada",
+    "Ausência de ferrugem interna",
+    "Produto protegido contra contaminação cruzada",
+    "Ausência de materiais estranhos no interior do baú",
+    "Os contentores encontram-se higienizados",
+];
+
+export const criarSegurancaTransportePadrao = (): SegurancaTransporteItem[] =>
+    ITENS_SEGURANCA_TRANSPORTE.map((item, index) => ({
+        id: Date.now() + index,
+        item,
+        conforme: null,
+        observacao: "",
+        acaoCorretiva: "",
+    }));
+
 export const WEEK_DAYS = [
     { short: "Seg", full: "Segunda" },
     { short: "Ter", full: "Terça" },
@@ -105,14 +139,6 @@ export const WEEK_DAYS = [
     { short: "Qui", full: "Quinta" },
     { short: "Sex", full: "Sexta" },
     { short: "Sab", full: "Sábado" },
-];
-
-export const PRODUTOS_LIMPEZA = [
-    "Primmax Sol Plus",
-    "Álcool em gel",
-    "Dermol plus",
-    "Sanclor",
-    "Primmax Sanclor"
 ];
 
 // 🟢 LEGENDAS E OBSERVAÇÕES CENTRALIZADAS POR TELA
@@ -126,17 +152,6 @@ export const LEGENDA_TRANSPORTE = [
     "• SIM: Veículo de transporte inspecionado e considerado higienicamente apto para carregamento.",
     "• NÃO: Irregularidade encontrada na estrutura do baú, odor incompatível ou presença de vetores.",
     "• OBSERVAÇÃO: Recomenda-se a limpeza e correção imediata do compartimento antes de iniciar o fluxo."
-];
-
-export const LEGENDA_EMBALAGEM = [
-    "• SIM: Material íntegro, livre de sujidades e pragas, com integridade de lote e validade preservados.",
-    "• NÃO: Presença de avarias físicas, violação de lote ou inconformidades visuais na embalagem.",
-    "• OBSERVAÇÃO: Itens reprovados devem ser imediatamente segregados e devolvidos ao setor de suprimentos."
-];
-
-export const LEGENDA_LIMPEZA = [
-    "• SIM: Produto químico de limpeza recebido em total conformidade com a especificação técnica e FISPQ.",
-    "• NÃO: Divergência de princípio ativo, ausência de rotulagem regulamentar ou embalagem danificada."
 ];
 
 export const LEGENDA_OBJETOS_ESTRANHOS = [

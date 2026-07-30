@@ -5,7 +5,7 @@ export type CQTabType = "vidros" | "pragas" | "inusuais" | "rejeitos" | "residuo
 export interface VidrosLog {
     id: number;
     item: string;
-    conforme: "C" | "NC" | null;
+    conforme: "SIM" | "NÃO" | null;
     acaoRecomendada: string;
     tempoCorrecao: string;
 }
@@ -54,8 +54,8 @@ export interface ResiduosLog {
 }
 
 export const VIDROS_ITEMS = [
-    "Vidros Trincados", "Vidros Quebrados", "Vidros Ausentes", "Vidros Sujos",
-    "Lâmpadas c/Proteção", "Presença de plástico rígido", "Outros"
+    "Vidros Trincados?", "Vidros Quebrados?", "Vidros Ausentes?", "Vidros Sujos?", "Presença de quebra de plásticos rígidos no local?",
+    "Lâmpadas c/Proteção?",
 ];
 
 export const PRAGAS_SETORES = [
@@ -88,8 +88,8 @@ export const LEGENDA_INUSUAIS = [
 ];
 
 export const LEGENDA_PRAGAS = [
-    "SIM: Ausência de pragas.",
-    "NÃO: Presença de pragas (descrever em Ação Corretiva)."
+    "SIM: Presença de pragas (descrever em Ação Corretiva).",
+    "NÃO: Ausência de pragas.",
 ];
 
 export const LEGENDA_REJEITOS = [
@@ -100,8 +100,9 @@ export const LEGENDA_REJEITOS = [
 ];
 
 export const LEGENDA_VIDROS = [
-    "SIM: Item em conformidade (Sem trincas, limpo e íntegro).",
-    "NÃO: Item não conforme (Avariado ou sujo - requer ação imediata)."
+    "SIM: Item não conforme (Avariado ou sujo - requer ação imediata).",
+    "NÃO: Item em conformidade (Sem trincas, limpo e íntegro).",
+    "• Lâmpadas com Proteção: SIM (Adequado) | NÃO (Inadequado)"
 ];
 
 // 🔥 LEGENDA PARA RESÍDUOS

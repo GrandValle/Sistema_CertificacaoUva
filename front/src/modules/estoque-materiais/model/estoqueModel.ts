@@ -1,5 +1,8 @@
 // Tipagem para as abas da tela
-export type TabType = "estoque" | "tesouras" | "oculos" | "embalagem";
+export type TabType = "estoque" | "tesouras" | "oculos" | "limpeza";
+
+// 🔥 NOVO: Para a sub-aba de inspeção (exportação)
+export type TabTypeExport = TabType | "limpeza";
 
 // Tipagem do Catálogo de Produtos
 export interface ProdutoCatalogo {
@@ -27,62 +30,49 @@ export interface EstoqueLog {
 export interface RegistroTesoura {
     id: string;
     funcionario: string;
+    tipo: 'EFETIVO' | 'CONTRATADO' | 'DESLIGADO' | 'DESLIGADA';
     numeroTesoura: string;
-    tipo: "EFETIVO" | "CONTRATADO" | "DESLIGADO" | "DESLIGADA";
-    dias: {
-        [key: string]: {
-            e: boolean;
-            d: boolean;
-        };
-    };
+    visivel?: boolean;
+    dias: Record<string, { e: boolean; d: boolean; f?: boolean }>;
+    statusTesoura: 'EM_USO' | 'DEVOLVIDA';
 }
 
 // Tipagem da Devolução de Óculos (PHU-044)
 export interface RegistroOculos {
     id: string;
     data: string;
-    colaboradorId: string; // UUID do colaborador
+    colaboradorId: string;
     intacto: "SIM" | "NÃO" | null;
     assinatura: string | null;
     observacao: string;
     status: "ATIVO" | "INATIVO";
     criadoEm?: string;
     atualizadoEm?: string;
+    dias?: Record<string, boolean | string | null>;
 }
-
 // =======================================================
-// CONTROLE DE ENTRADA DE EMBALAGEM (PHU-032)
+// CONTROLE DE ENTRADA DE MATERIAIS DE LIMPEZA (PHU-036)
 // =======================================================
 
-export interface EmbalagemEntry {
-    id: string;
-
-    // Dados da carga
-    data: string;
-    horaChegada: string;
+export interface CleaningLog {
+    id: number;
+    date: string;
+    product: string;
+    produtoCorreto: "Sim" | "Não" | null;
+    composicaoOk: "Sim" | "Não" | null;
+    embalagemOk: "Sim" | "Não" | null;
+    padraoExigido: "Sim" | "Não" | null;
+    cumprePedido: "Sim" | "Não" | null;
     responsavel: string | null;
-    tipoTransporte: string;
-    tipoMaterial: string;
-
-    // Condições de acondicionamento da carga (AGORA COM 3 ESTADOS)
-    limpeza: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
-    conservacao: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
-    estadoTransporte: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
-    odoresTransporte: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
-    problemaAcondicionamento: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
-    estadoMaterial: "BOM" | "ACEITÁVEL" | "REPROVADO" | "";
-
-    // Verificações rápidas
-    materialDanificado: boolean | null;
-    materialLimpo: boolean | null;
-    comOdores: boolean | null;
-
-    // Campo de observações
-    observacoes: string;
-
-    // Ações corretivas
-    acoesCorretivas: string;
 }
+
+// Produtos disponíveis para inspeção de limpeza
+export const PRODUTOS_LIMPEZA: string[] = [
+    "Primmax Sol Plus",
+    "Álcool em gel",
+    "Dermol plus",
+    "Primmax Sanclor"
+];
 
 // =======================================================
 // CONSTANTES PADRONIZADAS
@@ -112,27 +102,20 @@ export const LEGENDA_ESTOQUE = [
 ];
 
 export const LEGENDA_OCULOS = [
-    "SIM: EPI devolvido em perfeitas condições de uso.",
-    "NÃO: EPI danificado, riscado ou perdido (sujeito a reposição/desconto)."
+    "SIM: Óculos em perfeitas condições de uso.",
+    "NÃO: Óculos com avarias, necessidade de reparo ou manutenção.",
+    "F: Falta (Colaborador ausente ou afastado no dia da verificação)."
 ];
 
 export const LEGENDA_TESOURAS = [
     "E: Entrega da tesoura ao funcionário.",
     "D: Devolução da tesoura ao estoque.",
-    "E/D: Entrega e devolução realizadas no mesmo dia."
+    "E/D: Entrega e devolução realizadas no mesmo dia.",
+    "F: Falta (Colaborador ausente ou afastado no dia da verificação)."
 ];
 
-export const CAMPOS_CONDICOES = [
-    { label: "Limpeza do Veículo", field: "limpeza" },
-    { label: "Conservação do Material", field: "conservacao" },
-    { label: "Estado do Transporte", field: "estadoTransporte" },
-    { label: "Odores no Transporte", field: "odoresTransporte" },
-    { label: "Problema de Acondicionamento", field: "problemaAcondicionamento" },
-    { label: "Estado do Material", field: "estadoMaterial" },
-] as const;
-
-export const VERIFICACOES_RAPIDAS_BASE = [
-    { id: "materialDanificado", label: "Material Danificado?", invertColor: true },
-    { id: "materialLimpo", label: "Material Limpo?", invertColor: false },
-    { id: "comOdores", label: "Com Odores?", invertColor: true }
-] as const;
+// 🔥 NOVA LEGENDA PARA LIMPEZA
+export const LEGENDA_LIMPEZA = [
+    "SIM: Produto de limpeza recebido em total conformidade com a especificação técnica.",
+    "NÃO: Divergência de princípio ativo, ausência de rotulagem ou embalagem danificada.",
+];

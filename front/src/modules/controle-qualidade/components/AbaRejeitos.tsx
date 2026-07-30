@@ -181,7 +181,7 @@ export function AbaRejeitos({ controller }: { controller: any }) {
                 <div className="text-center py-16 bg-white border-2 border-dashed border-slate-200 rounded-xl">
                     <BiPackage size={48} className="mx-auto mb-4 text-slate-300" />
                     <p className="font-bold text-slate-600 text-lg">Nenhum registro criado.</p>
-                    <p className="text-sm text-slate-500 mt-1">Clique no botão "Novo Registro" acima para começar.</p>
+                    <p className="text-sm text-slate-500 mt-1">Clique no botão &quot;Novo Registro&quot; acima para começar.</p>
                 </div>
             )}
         </div>

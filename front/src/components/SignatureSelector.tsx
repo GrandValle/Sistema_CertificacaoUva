@@ -13,6 +13,10 @@ const USERS = [
     "EDINALDO CERQUEIRA AMORIM",
     "JOÃO VITOR SANTOS SILVA",
     "ALEX SANDRO RIBEIRO DE SOUZA",
+    "DANIELA DA SILVA PEREIRA DOS SANTOS",
+    "FRANCISCO ROMERIO DA SILVA",
+    "Vitor Emanuel Freire de Souza",
+    "DEBORA TATIANE MOREIRA DOS SANTOS",
 ];
 
 const normalizeCompare = (str: string) =>
@@ -35,11 +39,20 @@ export const SignatureSelector = ({ value, onChange }: Props) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [search, setSearch] = useState("");
     const [imgStage, setImgStage] = useState(0);
-    const [isMounted, setIsMounted] = useState(false);
     const listId = useId();
 
-    useEffect(() => { setIsMounted(true); }, []);
+    // 🔥 NOVO: controle de montagem para evitar hidratação
+    const [isMounted, setIsMounted] = useState(false);
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
 
+    // Se não estiver montado, renderiza um placeholder vazio (ou null)
+    if (!isMounted) {
+        return <div className="w-full h-10 bg-gray-100 rounded-lg animate-pulse" />;
+    }
+
+    // Restante do código (igual, mas com a garantia de que só roda no cliente)
     const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -66,15 +79,12 @@ export const SignatureSelector = ({ value, onChange }: Props) => {
         reader.readAsDataURL(file);
     };
 
-    if (!isMounted) return <div className="h-14 w-full bg-gray-50 rounded-lg animate-pulse" />;
-
     if (value) {
         const isUpload = value.startsWith("blob:") || value.startsWith("data:");
 
         const matchedUser = isUpload ? null : USERS.find(u => normalizeCompare(u) === normalizeCompare(value));
         const displayName = isUpload ? "Assinatura Importada" : (matchedUser ? formatName(matchedUser) : formatName(value.replace(/_/g, " ")));
 
-        // 🟢 CORREÇÃO: Usar o nome exato (com espaços) como no projeto manga
         let imgSrc: string | undefined;
         if (!isUpload && matchedUser) {
             imgSrc = `/assinaturas/${matchedUser}.png`;
@@ -98,7 +108,6 @@ export const SignatureSelector = ({ value, onChange }: Props) => {
                                 onError={(e) => {
                                     (e.target as HTMLImageElement).onerror = null;
                                     setImgStage(prev => prev + 1);
-                                    // Se falhar, mostra o nome em texto
                                     const parent = e.currentTarget.parentElement;
                                     if (parent) {
                                         const fallback = document.createElement('span');

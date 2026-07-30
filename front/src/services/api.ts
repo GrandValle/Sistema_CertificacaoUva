@@ -1,4 +1,3 @@
-import { RegistroOculos } from "@/modules/estoque-materiais/model/estoqueModel";
 
 //const BASE_URL = "http://192.168.253.18:3019/api";
 const BASE_URL = "http://localhost:3019/api";
@@ -21,7 +20,6 @@ async function apiFetch(endpoint: string, options: RequestInit = {}, errorMessag
         throw new Error(errorData.error || errorMessage);
     }
 
-    // Tratamento para requisições como DELETE que podem não retornar JSON
     const text = await response.text();
     return text ? JSON.parse(text) : {};
 }
@@ -103,21 +101,42 @@ export async function atualizarTipoColaboradorOculos(id: string, tipo: "EFETIVO"
 }
 
 export async function atualizarColaboradorOculos(id: string, dados: any) {
-    return apiFetch(`/oculos/colaboradores/${id}`, { method: "PUT", body: JSON.stringify(dados) }, "Erro ao atualizar colaborador de óculos.");
+    return apiFetch(
+        `/oculos/colaboradores/${id}`,
+        {
+            method: "PUT",
+            body: JSON.stringify(dados) // 🔥 sem "status: ATIVO"
+        },
+        "Erro ao atualizar colaborador de óculos."
+    );
 }
 
 // ==========================================
-// 👓 REGISTROS DE ÓCULOS
+// 👓 REGISTROS DE ÓCULOS (DTOs / Tipagens Independentes)
 // ==========================================
+
+export interface CriarRegistroOculosPayload {
+    colaboradorId?: string;
+    equipamentoId?: string;
+    statusDetalhe?: string;
+    [key: string]: any; // Permite qualquer outro campo que seu form envie (ex: data, observacao)
+}
+
+export interface AtualizarRegistroOculosPayload {
+    [key: string]: any; // Flexível para enviar atualizações parciais
+}
+
 export async function listarRegistrosOculos() {
     return apiFetch("/oculos/registros", {}, "Erro ao buscar registros de óculos.");
 }
 
-export async function criarRegistroOculos(dados: Omit<RegistroOculos, "id" | "status" | "criadoEm" | "atualizadoEm">) {
+// 🔥 Usando o nosso próprio contrato interno (CriarRegistroOculosPayload)
+export async function criarRegistroOculos(dados: CriarRegistroOculosPayload) {
     return apiFetch("/oculos/registros", { method: "POST", body: JSON.stringify(dados) }, "Erro ao criar registro de óculos.");
 }
 
-export async function atualizarRegistroOculos(id: string, dados: Partial<RegistroOculos>) {
+// 🔥 Usando o nosso próprio contrato interno (AtualizarRegistroOculosPayload)
+export async function atualizarRegistroOculos(id: string, dados: AtualizarRegistroOculosPayload) {
     return apiFetch(`/oculos/registros/${id}`, { method: "PUT", body: JSON.stringify(dados) }, "Erro ao atualizar registro de óculos.");
 }
 
@@ -125,7 +144,7 @@ export async function desativarRegistroOculos(id: string) {
     return apiFetch(`/oculos/registros/${id}/desativar`, { method: "PATCH" }, "Erro ao desativar registro.");
 }
 
-export async function reativarColaboradorOculos(id: string, dados: { nome: string; tipo: "EFETIVO" | "CONTRATADO" }) {
+export async function reativarColaboradorOculos(id: string, dados: { nome: string; tipo: "EFETIVO" | "CONTRATADO", statusDetalhe?: string }) {
     return apiFetch(`/oculos/colaboradores/${id}`, { method: "PATCH", body: JSON.stringify({ ...dados, status: "ATIVO" }) }, "Erro ao reativar colaborador.");
 }
 
@@ -133,15 +152,21 @@ export async function reativarColaboradorOculos(id: string, dados: { nome: strin
 // 🧼 COLABORADORES LAVAGEM DE MÃOS
 // ==========================================
 export async function listarColaboradoresLavagem(ativos: boolean = true) {
-    return apiFetch(`/colaboradores-lavagem?ativos=${ativos}`, { cache: 'no-store' }, "Erro ao buscar colaboradores de lavagem.");
+    return apiFetch(`/colaboradores-lavagem`, { cache: 'no-store' }, "Erro ao buscar colaboradores de lavagem.");
 }
 
-export async function criarColaboradorLavagem(nome: string, tipo: "EFETIVO" | "CONTRATADO" = "EFETIVO") {
-    return apiFetch("/colaboradores-lavagem", { method: "POST", body: JSON.stringify({ nome, tipo }) }, "Erro ao criar colaborador de lavagem.");
+export async function criarColaboradorLavagem(nome: string, tipo: "EFETIVO" | "CONTRATADO" = "EFETIVO", status?: string, statusDetalhe?: string) {
+    return apiFetch("/colaboradores-lavagem", {
+        method: "POST",
+        body: JSON.stringify({ nome, tipo, status, statusDetalhe })
+    }, "Erro ao criar colaborador de lavagem.");
 }
 
-export async function atualizarColaboradorLavagem(id: string, nome?: string, tipo?: "EFETIVO" | "CONTRATADO", ativo?: boolean) {
-    return apiFetch(`/colaboradores-lavagem/${id}`, { method: "PUT", body: JSON.stringify({ nome, tipo, ativo }) }, "Erro ao atualizar colaborador.");
+export async function atualizarColaboradorLavagem(id: string, nome?: string, tipo?: "EFETIVO" | "CONTRATADO", ativo?: boolean, status?: string, statusDetalhe?: string) {
+    return apiFetch(`/colaboradores-lavagem/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({ nome, tipo, ativo, status, statusDetalhe })
+    }, "Erro ao atualizar colaborador.");
 }
 
 export async function desativarColaboradorLavagem(id: string) {
@@ -153,7 +178,7 @@ export async function reativarColaboradorLavagem(id: string) {
 }
 
 // ==========================================
-// 📊 CENTRAL DE RELATÓRIOS
+// 📊 CENTRAL DE HISTORICOS
 // ==========================================
 export const DocumentosAPI = {
     salvar: (tipoTela: string, dados: any, excelBlob: Blob, nomeArquivo: string) => {

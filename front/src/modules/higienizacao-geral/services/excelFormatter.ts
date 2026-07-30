@@ -1,11 +1,17 @@
 "use client";
 
 import * as ExcelJS from "exceljs";
-import { AreaPreenchimento, CleaningLog, PRODUTO_LEGENDA, RegistroHigienizacaoTesoura, DIAS_SEMANA_TESOURA, BebedouroLog, COMPLIANCE } from "../model/higienizacaoGeral";
+import {
+    AreaPreenchimento, CleaningLog, PRODUTO_LEGENDA,
+    RegistroHigienizacaoTesoura, DIAS_SEMANA_TESOURA,
+    BebedouroLog, COMPLIANCE,
+    buildBebedouroLegend,
+    buildLegendForArea
+} from "../model/higienizacaoGeral";
 
-// ────────────────────────────────────────────────────────────────────────────────
-// FUNÇÕES AUXILIARES
-// ────────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────
+// UTILITÁRIOS PUROS
+// ────────────────────────────────────────────────────────────────
 
 const formatName = (str: string) => {
     if (!str) return "";
@@ -33,47 +39,9 @@ const formatarPeriodo = (inicio?: string, fim?: string) => {
     }
 };
 
-function buildLegendForArea(area: AreaPreenchimento): string[] {
-    const baseLegend = [
-        "• SIM: O produto ou procedimento de limpeza foi aplicado e verificado.",
-        "• NÃO/Em branco: O produto ou procedimento não foi aplicado.",
-    ];
-    const lines = [...baseLegend, ""];
-    if (area.isMatricial) {
-        lines.push(`• PRODUTO UTILIZADO PARA HIGIENE: Água e Sanclor (Hipoclorito de sódio 20ml p/ 10L de água)`);
-    } else if (area.produtos && area.produtos.length > 0) {
-        area.produtos.forEach((sigla) => {
-            const descricao = PRODUTO_LEGENDA[sigla] || sigla;
-            lines.push(`• Sigla ${sigla}: Refere-se a "${descricao}".`);
-        });
-    }
-    return lines;
-}
-
-function addRevisionControlSection(ws: ExcelJS.Worksheet, numCols: number, docCode: string) {
-    ws.addRow([]);
-
-    const titleRow = ws.addRow(["CONTROLE DE REVISÃO DO DOCUMENTO"]);
-    ws.mergeCells(titleRow.number, 1, titleRow.number, numCols);
-    titleRow.getCell(1).font = { bold: true, size: 11, color: { argb: "FF000000" } };
-    titleRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-    titleRow.height = 24;
-
-    const reviewedByRow = ws.addRow(["Aprovação / Revisado por:", COMPLIANCE.revisedBy]);
-    const revisionDateRow = ws.addRow(["Data da Última Revisão:", COMPLIANCE.revisionDate]);
-    const docCodeRow = ws.addRow(["Código do Documento:", docCode]);
-
-    [reviewedByRow, revisionDateRow, docCodeRow].forEach((row) => {
-        if (numCols > 2) {
-            ws.mergeCells(row.number, 2, row.number, numCols);
-        }
-        row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-        row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
-        row.getCell(1).font = { size: 10, color: { argb: "FF000000" } };
-        row.getCell(2).font = { size: 10, color: { argb: "FF000000" } };
-        row.height = 20;
-    });
-}
+// ────────────────────────────────────────────────────────────────
+// FUNÇÕES ASSÍNCRONAS PARA IMAGENS
+// ────────────────────────────────────────────────────────────────
 
 const fetchLogoImage = async () => {
     const baseUrl = window.location.origin;
@@ -112,11 +80,169 @@ const fetchSignatureImage = async (baseName: string) => {
     return null;
 };
 
-// ────────────────────────────────────────────────────────────────────────────────
-// INTERFACE PRINCIPAL (atualizada com bebedourosLogs)
-// ────────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────
+// FUNÇÕES COMUNS DE CONFIGURAÇÃO DA PLANILHA
+// ────────────────────────────────────────────────────────────────
 
-interface ExportHigienizacaoParams {
+function setupWorkbook(ws: ExcelJS.Worksheet, numCols: number, orientation: 'portrait' | 'landscape' = 'landscape') {
+    ws.pageSetup = {
+        paperSize: 9,
+        orientation,
+        fitToPage: true,
+        fitToWidth: 1,
+        fitToHeight: 0,
+        margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 }
+    };
+}
+
+async function addHeader(
+    workbook: ExcelJS.Workbook,
+    ws: ExcelJS.Worksheet,
+    numCols: number,
+    title: string,
+    freq?: string
+) {
+    // 5 linhas em branco para respiro do logo
+    for (let i = 0; i < 5; i++) ws.addRow([]);
+
+    // Título principal do relatório
+    const titleRow = ws.addRow([title]);
+    ws.mergeCells(titleRow.number, 1, titleRow.number, numCols);
+    titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
+    titleRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+    titleRow.height = 25;
+
+    // Frequência de execução (se houver)
+    if (freq) {
+        const freqRow = ws.addRow([`Frequência: ${freq}`]);
+        ws.mergeCells(freqRow.number, 1, freqRow.number, numCols);
+        freqRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
+    }
+
+    // Setor padrão
+    const setorRow = ws.addRow(["Setor: PACKING HOUSE"]);
+    ws.mergeCells(setorRow.number, 1, setorRow.number, numCols);
+    setorRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
+
+    ws.addRow([]);
+
+    // Insere o logotipo corporativo no canto superior
+    const logoFile = await fetchLogoImage();
+    if (logoFile) {
+        const imageId = workbook.addImage({ buffer: logoFile.buffer, extension: logoFile.ext });
+        ws.addImage(imageId, { tl: { col: 0.1, row: 0.2 }, ext: { width: 140, height: 75 } });
+    }
+}
+
+function addObservation(ws: ExcelJS.Worksheet, numCols: number, observacao: string | undefined) {
+    if (!observacao || observacao.trim() === "") return;
+    ws.addRow([]);
+    const titleRow = ws.addRow(["OBSERVAÇÕES DE NÃO CONFORMIDADE"]);
+    ws.mergeCells(titleRow.number, 1, titleRow.number, numCols);
+    titleRow.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+    titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFB91C1C" } };
+    titleRow.height = 20;
+
+    const contentRow = ws.addRow([observacao]);
+    ws.mergeCells(contentRow.number, 1, contentRow.number, numCols);
+    contentRow.getCell(1).alignment = { horizontal: "left", vertical: "top", wrapText: true };
+    contentRow.height = 40;
+}
+
+function addLegend(ws: ExcelJS.Worksheet, numCols: number, legendLines: string[]) {
+    ws.addRow([]);
+    const titleRow = ws.addRow(["LEGENDA E PRODUTOS UTILIZADOS"]);
+    ws.mergeCells(titleRow.number, 1, titleRow.number, numCols);
+    titleRow.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+    titleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B5563" } };
+    titleRow.height = 24;
+
+    legendLines.forEach((line) => {
+        const row = ws.addRow([line]);
+        ws.mergeCells(row.number, 1, row.number, numCols);
+        row.getCell(1).font = { size: 9 };
+        row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+        row.height = 18;
+    });
+}
+
+function addRevisionControl(ws: ExcelJS.Worksheet, numCols: number, docCode: string) {
+    ws.addRow([]);
+    const titleRow = ws.addRow(["CONTROLE DE REVISÃO DO DOCUMENTO"]);
+    ws.mergeCells(titleRow.number, 1, titleRow.number, numCols);
+    titleRow.getCell(1).font = { bold: true, size: 11, color: { argb: "FF000000" } };
+    titleRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+    titleRow.height = 24;
+
+    // 🔥 Código do Documento de volta no Rodapé
+    const rows = [
+        ["Aprovação / Revisado por:", COMPLIANCE.revisedBy],
+        ["Data da Última Revisão:", COMPLIANCE.revisionDate],
+        ["Código do Documento:", docCode]
+    ];
+    rows.forEach(([label, value]) => {
+        const row = ws.addRow([label, value]);
+        if (numCols > 2) {
+            ws.mergeCells(row.number, 2, row.number, numCols);
+        }
+        row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+        row.getCell(1).font = { size: 10, color: { argb: "FF000000" } };
+        row.getCell(2).font = { size: 10, color: { argb: "FF000000" } };
+        row.height = 20;
+    });
+}
+
+/**
+ * 🔥 PROCESSA A CÉLULA DE ASSINATURA COM TAMANHO DINÂMICO PARA NOME LONGO
+ */
+async function processSignatureCell(
+    workbook: ExcelJS.Workbook,
+    ws: ExcelJS.Worksheet,
+    row: ExcelJS.Row,
+    colIndex: number,
+    signatureName: string | null
+) {
+    if (!signatureName) return;
+    const cell = row.getCell(colIndex);
+    const formattedName = formatName(signatureName);
+    cell.value = formattedName;
+
+    const nameLength = formattedName.length;
+    const fontSize = nameLength > 28 ? 7.5 : (nameLength > 20 ? 8 : 9);
+
+    cell.font = { size: fontSize, bold: true };
+    cell.alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
+
+    if (signatureName.startsWith("data:image")) {
+        try {
+            const base64Data = signatureName.split(",")[1];
+            const imgId = workbook.addImage({ base64: base64Data, extension: "png" });
+            ws.addImage(imgId, {
+                tl: { col: colIndex - 1 + 0.15, row: row.number - 1 + 0.10 },
+                ext: { width: 140, height: 50 },
+                editAs: "oneCell"
+            });
+            return;
+        } catch (e) { }
+    }
+
+    const imageFile = await fetchSignatureImage(signatureName);
+    if (imageFile) {
+        const imgId = workbook.addImage({ buffer: imageFile.buffer, extension: imageFile.ext });
+        ws.addImage(imgId, {
+            tl: { col: colIndex - 1 + 0.15, row: row.number - 1 + 0.10 },
+            ext: { width: 140, height: 50 },
+            editAs: "oneCell"
+        });
+    }
+}
+
+// ────────────────────────────────────────────────────────────────
+// EXPORTAÇÃO PRINCIPAL (ÁREAS NORMAIS)
+// ────────────────────────────────────────────────────────────────
+
+interface ExportParams {
     activeArea: AreaPreenchimento;
     currentLogs: CleaningLog[];
     modoOperacao: "campo" | "packing";
@@ -125,40 +251,23 @@ interface ExportHigienizacaoParams {
     bebedourosLogs?: BebedouroLog[];
 }
 
-// ────────────────────────────────────────────────────────────────────────────────
-// FUNÇÃO PRINCIPAL
-// ────────────────────────────────────────────────────────────────────────────────
-
 export const exportHigienizacaoToExcel = async ({
     activeArea,
     currentLogs,
     modoOperacao,
     observacaoGeral,
     tesourasLogs,
-    bebedourosLogs, // 🔥 NOVO
-}: ExportHigienizacaoParams) => {
+    bebedourosLogs,
+}: ExportParams) => {
 
-    // 🔥 CASO TESOURAS
     if (activeArea.id === 'tesouras' && tesourasLogs) {
-        return await exportarTesourasExcel({
-            activeArea,
-            tesourasLogs,
-            observacaoGeral,
-            modoOperacao
-        });
+        return await exportarTesourasExcel({ activeArea, tesourasLogs, observacaoGeral, modoOperacao });
     }
 
-    // 🔥 CASO BEBEDOUROS
     if (activeArea.id === 'bebedouros' && bebedourosLogs) {
-        return await exportarBebedourosExcel({
-            activeArea,
-            bebedourosLogs,
-            observacaoGeral,
-            modoOperacao
-        });
+        return await exportarBebedourosExcel({ activeArea, bebedourosLogs, observacaoGeral, modoOperacao });
     }
 
-    // ─── ÁREAS NORMAIS (PANOS, ETC.) ──────────────────────────────────────────
     const workbook = new ExcelJS.Workbook();
     const ws = workbook.addWorksheet("Higienização");
 
@@ -178,14 +287,16 @@ export const exportHigienizacaoToExcel = async ({
 
     let headers: string[] = [];
     if (isMatricial) {
-        headers = ["Data", activeArea.campo2 || "Horário", "Status", "Responsável Limpeza", "Monitora"];
+        headers = ["Data", activeArea.campo2 || "Horário", "Status", "Responsável Limpeza", "Monitor"];
         ws.getColumn(1).width = 14;
         ws.getColumn(2).width = 14;
         ws.getColumn(3).width = 12;
-        ws.getColumn(4).width = 35;
-        ws.getColumn(5).width = 35;
+        ws.getColumn(4).width = 40;
+        ws.getColumn(5).width = 40;
     } else {
-        headers = ["Data", activeArea.campo2 || "Horário", ...(activeArea.produtos || []), "Assinatura"];
+        const nomeAssinatura = activeArea.id === 'lavagem_proc' ? "Fiscal Responsável" : "Assinatura";
+
+        headers = ["Data", activeArea.campo2 || "Horário", ...(activeArea.produtos || []), nomeAssinatura];
         ws.getColumn(1).width = 14;
         ws.getColumn(2).width = 14;
         let colIdx = 3;
@@ -193,51 +304,21 @@ export const exportHigienizacaoToExcel = async ({
             ws.getColumn(colIdx).width = 10;
             colIdx++;
         });
-        ws.getColumn(colIdx).width = 30;
+        ws.getColumn(colIdx).width = 40;
     }
 
-    const maxCol = headers.length;
+    const numCols = headers.length;
+    setupWorkbook(ws, numCols, numCols > 6 ? "landscape" : "portrait");
 
-    ws.pageSetup = {
-        paperSize: 9,
-        orientation: maxCol > 6 ? "landscape" : "portrait",
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 0,
-        margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 }
-    };
+    let tituloOficial = activeArea.nome.toUpperCase();
+    if (activeArea.id === 'lavagem_proc') tituloOficial = 'LAVAGEM DE CONTENTORES DO PROCESSAMENTO';
+    if (activeArea.id === 'lavagem_ref') tituloOficial = 'LAVAGEM DE CONTENTORES DE REFUGO';
 
-    for (let i = 0; i < 5; i++) ws.addRow([]);
-
-    const titleRow = ws.addRow([`CONTROLE DE HIGIENIZAÇÃO - ${activeArea.nome.toUpperCase()}`]);
-    titleRow.height = 25;
-    ws.mergeCells(titleRow.number, 1, titleRow.number, maxCol);
-    titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
-    titleRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-
-    const metaFreqRow = ws.addRow([`Frequência: ${activeArea.freq}`]);
-    ws.mergeCells(metaFreqRow.number, 1, metaFreqRow.number, maxCol);
-    metaFreqRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
-
-    const metaDateRow = ws.addRow([`Exportado em: ${new Date().toLocaleString("pt-BR")}`]);
-    ws.mergeCells(metaDateRow.number, 1, metaDateRow.number, maxCol);
-    metaDateRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
-
-    const metaSetorRow = ws.addRow(["Setor: PACKING HOUSE"]);
-    ws.mergeCells(metaSetorRow.number, 1, metaSetorRow.number, maxCol);
-    metaSetorRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
-
-    ws.addRow([]);
-
-    const logoFile = await fetchLogoImage();
-    if (logoFile) {
-        const imageId = workbook.addImage({ buffer: logoFile.buffer, extension: logoFile.ext });
-        ws.addImage(imageId, { tl: { col: 0.1, row: 0.2 }, ext: { width: 140, height: 75 } });
-    }
+    await addHeader(workbook, ws, numCols, `CONTROLE DE HIGIENIZAÇÃO - ${tituloOficial}`, activeArea.freq);
 
     const headerRow = ws.addRow(headers);
     headerRow.height = 24;
-    for (let i = 1; i <= maxCol; i++) {
+    for (let i = 1; i <= numCols; i++) {
         const cell = headerRow.getCell(i);
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E3A8A" } };
         cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
@@ -273,84 +354,32 @@ export const exportHigienizacaoToExcel = async ({
         const dataRow = ws.addRow(rowData);
         dataRow.height = 65;
 
-        for (let i = 1; i <= maxCol; i++) {
+        for (let i = 1; i <= numCols; i++) {
             const cell = dataRow.getCell(i);
             cell.border = { top: { style: "thin", color: { argb: "FFD1D5DB" } }, left: { style: "thin", color: { argb: "FFD1D5DB" } }, bottom: { style: "thin", color: { argb: "FFD1D5DB" } }, right: { style: "thin", color: { argb: "FFD1D5DB" } } };
             cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
         }
 
-        const processSignature = async (signatureName: string, colPos: number) => {
-            if (!signatureName) return;
-            const sigCell = dataRow.getCell(colPos);
-            sigCell.value = formatName(signatureName);
-            sigCell.font = { size: 9, bold: true };
-            sigCell.alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
-
-            if (signatureName.startsWith("data:image")) {
-                try {
-                    const base64Data = signatureName.split(",")[1];
-                    const imgId = workbook.addImage({ base64: base64Data, extension: "png" });
-                    ws.addImage(imgId, { tl: { col: colPos - 1 + 0.25, row: dataRow.number - 1 + 0.15 }, ext: { width: 150, height: 60 }, editAs: "oneCell" });
-                    return;
-                } catch (e) { }
-            }
-
-            const imageFile = await fetchSignatureImage(signatureName);
-            if (imageFile) {
-                const imgId = workbook.addImage({ buffer: imageFile.buffer, extension: imageFile.ext });
-                ws.addImage(imgId, { tl: { col: colPos - 1 + 0.25, row: dataRow.number - 1 + 0.15 }, ext: { width: 150, height: 60 }, editAs: "oneCell" });
-            }
-        };
-
         if (isMatricial && reg.monitorSignature) {
-            await processSignature(reg.monitorSignature, 5);
+            await processSignatureCell(workbook, ws, dataRow, 5, reg.monitorSignature);
         }
         if (reg.signature) {
-            const colPos = isMatricial ? 4 : maxCol;
-            await processSignature(reg.signature, colPos);
+            const colPos = isMatricial ? 4 : numCols;
+            await processSignatureCell(workbook, ws, dataRow, colPos, reg.signature);
         }
     }
 
-    if (observacaoGeral && observacaoGeral.trim() !== "") {
-        ws.addRow([]);
-        const obsTitleRow = ws.addRow(["OBSERVAÇÕES DE NÃO CONFORMIDADE"]);
-        ws.mergeCells(obsTitleRow.number, 1, obsTitleRow.number, maxCol);
-        obsTitleRow.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-        obsTitleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFB91C1C" } };
-        obsTitleRow.height = 20;
-
-        const obsContentRow = ws.addRow([observacaoGeral]);
-        ws.mergeCells(obsContentRow.number, 1, obsContentRow.number, maxCol);
-        obsContentRow.getCell(1).alignment = { horizontal: "left", vertical: "top", wrapText: true };
-        obsContentRow.height = 40;
-    }
-
-    ws.addRow([]);
-
-    const legendTitle = ws.addRow(["LEGENDA E PRODUTOS UTILIZADOS"]);
-    ws.mergeCells(legendTitle.number, 1, legendTitle.number, maxCol);
-    legendTitle.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-    legendTitle.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B5563" } };
-    legendTitle.height = 24;
-
-    const legendLines = buildLegendForArea(activeArea);
-    legendLines.forEach((line) => {
-        const obsRow = ws.addRow([line]);
-        ws.mergeCells(obsRow.number, 1, obsRow.number, maxCol);
-        obsRow.getCell(1).font = { size: 9 };
-        obsRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-        obsRow.height = 18;
-    });
-
-    addRevisionControlSection(ws, maxCol, activeArea.doc);
+    addObservation(ws, numCols, observacaoGeral);
+    addLegend(ws, numCols, buildLegendForArea(activeArea));
+    addRevisionControl(ws, numCols, activeArea.doc);
 
     const buffer = await workbook.xlsx.writeBuffer();
     return new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 };
 
-// ────────────────────────────────────────────────────────────────────────────────
-// FUNÇÃO AUXILIAR PARA EXPORTAÇÃO SEMANAL (TESOURAS)
-// ────────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────
+// EXPORTAÇÃO TESOURAS
+// ────────────────────────────────────────────────────────────────
 
 async function exportarTesourasExcel({
     activeArea,
@@ -369,44 +398,17 @@ async function exportarTesourasExcel({
     const numDias = DIAS_SEMANA_TESOURA.length;
     const numCols = 1 + numDias * 2 + 2;
 
-    ws.pageSetup = {
-        paperSize: 9,
-        orientation: "landscape",
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 0,
-        margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 }
-    };
+    setupWorkbook(ws, numCols, "landscape");
 
     ws.getColumn(1).width = 28;
     for (let i = 0; i < numDias; i++) {
         ws.getColumn(2 + i * 2).width = 12;
         ws.getColumn(3 + i * 2).width = 12;
     }
-    ws.getColumn(2 + numDias * 2).width = 25;
-    ws.getColumn(3 + numDias * 2).width = 25;
+    ws.getColumn(2 + numDias * 2).width = 38;
+    ws.getColumn(3 + numDias * 2).width = 38;
 
-    for (let i = 0; i < 5; i++) ws.addRow([]);
-
-    const titleRow = ws.addRow([`CONTROLE DE HIGIENIZAÇÃO - ${activeArea.nome.toUpperCase()}`]);
-    ws.mergeCells(titleRow.number, 1, titleRow.number, numCols);
-    titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
-
-    const metaDateRow = ws.addRow([`Exportado em: ${new Date().toLocaleString("pt-BR")}`]);
-    ws.mergeCells(metaDateRow.number, 1, metaDateRow.number, numCols);
-    metaDateRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
-
-    const metaSetorRow = ws.addRow(["Setor: PACKING HOUSE"]);
-    ws.mergeCells(metaSetorRow.number, 1, metaSetorRow.number, numCols);
-    metaSetorRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
-
-    ws.addRow([]);
-
-    const logoFile = await fetchLogoImage();
-    if (logoFile) {
-        const imageId = workbook.addImage({ buffer: logoFile.buffer, extension: logoFile.ext });
-        ws.addImage(imageId, { tl: { col: 0.1, row: 0.2 }, ext: { width: 140, height: 75 } });
-    }
+    await addHeader(workbook, ws, numCols, `CONTROLE DE HIGIENIZAÇÃO - ${activeArea.nome.toUpperCase()}`);
 
     const headerRow1 = ws.addRow([]);
     headerRow1.getCell(1).value = "Período";
@@ -432,8 +434,6 @@ async function exportarTesourasExcel({
         headerRow2.getCell(col).alignment = { horizontal: "center", vertical: "middle" };
         headerRow2.getCell(col + 1).alignment = { horizontal: "center", vertical: "middle" };
     }
-    headerRow2.getCell(respCol).value = "";
-    headerRow2.getCell(monCol).value = "";
 
     [headerRow1, headerRow2].forEach(row => {
         row.height = 24;
@@ -447,7 +447,6 @@ async function exportarTesourasExcel({
 
     for (const week of tesourasLogs) {
         const row = ws.addRow([]);
-
         row.getCell(1).value = formatarPeriodo(week.dataInicio, week.dataFim);
         row.getCell(1).alignment = { horizontal: "center", vertical: "middle", wrapText: true };
 
@@ -455,7 +454,6 @@ async function exportarTesourasExcel({
             const diaId = DIAS_SEMANA_TESOURA[i].id;
             const qtde = week.dias?.[diaId]?.qtde ?? "";
             const status = week.dias?.[diaId]?.status ?? "";
-
             const statusLabel = status === 'C' ? 'SIM' : (status === 'NC' ? 'NÃO' : '');
 
             row.getCell(2 + i * 2).value = qtde;
@@ -464,85 +462,27 @@ async function exportarTesourasExcel({
             row.getCell(3 + i * 2).alignment = { horizontal: "center", vertical: "middle" };
         }
 
-        const respCell = row.getCell(respCol);
-        const monCell = row.getCell(monCol);
-
-        respCell.value = formatName(week.respLimpeza || "");
-        monCell.value = formatName(week.monitorResponsavel || "");
-
-        respCell.alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
-        monCell.alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
-
-        respCell.font = { size: 9, bold: true };
-        monCell.font = { size: 9, bold: true };
-
-        const processSig = async (signatureName: string | null, cell: ExcelJS.Cell, colIndex: number) => {
-            if (!signatureName) return;
-            if (signatureName.startsWith("data:image")) {
-                try {
-                    const base64Data = signatureName.split(",")[1];
-                    const imgId = workbook.addImage({ base64: base64Data, extension: "png" });
-                    ws.addImage(imgId, { tl: { col: colIndex - 1 + 0.25, row: row.number - 1 + 0.15 }, ext: { width: 150, height: 60 }, editAs: "oneCell" });
-                    return;
-                } catch (e) { }
-            }
-            const imageFile = await fetchSignatureImage(signatureName);
-            if (imageFile) {
-                const imgId = workbook.addImage({ buffer: imageFile.buffer, extension: imageFile.ext });
-                ws.addImage(imgId, { tl: { col: colIndex - 1 + 0.25, row: row.number - 1 + 0.15 }, ext: { width: 150, height: 60 }, editAs: "oneCell" });
-            }
-        };
-
-        await processSig(week.respLimpeza, respCell, respCol);
-        await processSig(week.monitorResponsavel, monCell, monCol);
+        await processSignatureCell(workbook, ws, row, respCol, week.respLimpeza);
+        await processSignatureCell(workbook, ws, row, monCol, week.monitorResponsavel);
 
         row.height = 65;
         for (let i = 1; i <= numCols; i++) {
             const cell = row.getCell(i);
-            cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+            cell.border = { top: { style: "thin", color: { argb: "FFD1D5DB" } }, left: { style: "thin", color: { argb: "FFD1D5DB" } }, bottom: { style: "thin", color: { argb: "FFD1D5DB" } }, right: { style: "thin", color: { argb: "FFD1D5DB" } } };
         }
     }
 
-    if (observacaoGeral && observacaoGeral.trim() !== "") {
-        ws.addRow([]);
-        const obsTitleRow = ws.addRow(["OBSERVAÇÕES DE NÃO CONFORMIDADE"]);
-        ws.mergeCells(obsTitleRow.number, 1, obsTitleRow.number, numCols);
-        obsTitleRow.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-        obsTitleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFB91C1C" } };
-        obsTitleRow.height = 20;
-
-        const obsContentRow = ws.addRow([observacaoGeral]);
-        ws.mergeCells(obsContentRow.number, 1, obsContentRow.number, numCols);
-        obsContentRow.getCell(1).alignment = { horizontal: "left", vertical: "top", wrapText: true };
-        obsContentRow.height = 28;
-    }
-
-    ws.addRow([]);
-
-    const legendTitle = ws.addRow(["LEGENDA E PRODUTOS UTILIZADOS"]);
-    ws.mergeCells(legendTitle.number, 1, legendTitle.number, numCols);
-    legendTitle.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-    legendTitle.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B5563" } };
-    legendTitle.height = 24;
-
-    const legendLines = buildLegendForArea(activeArea);
-    legendLines.forEach((line) => {
-        const row = ws.addRow([line]);
-        ws.mergeCells(row.number, 1, row.number, numCols);
-        row.getCell(1).font = { size: 9 };
-        row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-        row.height = 18;
-    });
-
-    addRevisionControlSection(ws, numCols, activeArea.doc);
+    addObservation(ws, numCols, observacaoGeral);
+    addLegend(ws, numCols, buildLegendForArea(activeArea));
+    addRevisionControl(ws, numCols, activeArea.doc);
 
     const buffer = await workbook.xlsx.writeBuffer();
     return new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
 }
 
-// ────────────────────────────────────────────────────────────────────────────────
-// 🔥 FUNÇÃO AUXILIAR PARA EXPORTAÇÃO DOS BEBEDOUROS
-// ────────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────
+// EXPORTAÇÃO BEBEDOUROS
+// ────────────────────────────────────────────────────────────────
 
 async function exportarBebedourosExcel({
     activeArea,
@@ -567,7 +507,6 @@ async function exportarBebedourosExcel({
         const hasObservacao = String(log.observacao || "").trim() !== "";
         const hasAcaoCorretiva = String(log.acaoCorretiva || "").trim() !== "";
         const hasSignature = String(log.signature || "").trim() !== "";
-
         return hasData || hasLocal || hasLimpeza || hasTrocaFiltro || hasManutencao || hasObservacao || hasAcaoCorretiva || hasSignature;
     });
 
@@ -587,52 +526,25 @@ async function exportarBebedourosExcel({
     const numCols = headers.length;
     const signatureColIndex = numCols;
 
-    ws.pageSetup = {
-        paperSize: 9,
-        orientation: "landscape",
-        fitToPage: true,
-        fitToWidth: 1,
-        fitToHeight: 0,
-        margins: { left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2 }
-    };
+    setupWorkbook(ws, numCols, "landscape");
 
-    ws.getColumn(1).width = 18;  // Data
-    ws.getColumn(2).width = 30;  // Local
-    ws.getColumn(3).width = 22;  // Limpeza
-    ws.getColumn(4).width = 22;  // Troca Filtro
-    ws.getColumn(5).width = 22;  // Manutenção
+    ws.getColumn(1).width = 18;
+    ws.getColumn(2).width = 30;
+    ws.getColumn(3).width = 22;
+    ws.getColumn(4).width = 22;
+    ws.getColumn(5).width = 22;
     let nextCol = 6;
     if (hasObservacao) {
-        ws.getColumn(nextCol).width = 40;  // Observação
+        ws.getColumn(nextCol).width = 40;
         nextCol++;
     }
     if (hasAcaoCorretiva) {
-        ws.getColumn(nextCol).width = 40;  // Ação Corretiva
+        ws.getColumn(nextCol).width = 40;
         nextCol++;
     }
-    ws.getColumn(nextCol).width = 34;  // Assinatura
+    ws.getColumn(nextCol).width = 38;
 
-    for (let i = 0; i < 5; i++) ws.addRow([]);
-
-    const titleRow = ws.addRow([`CONTROLE DE HIGIENIZAÇÃO - ${activeArea.nome.toUpperCase()}`]);
-    ws.mergeCells(titleRow.number, 1, titleRow.number, numCols);
-    titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
-
-    const metaDateRow = ws.addRow([`Exportado em: ${new Date().toLocaleString("pt-BR")}`]);
-    ws.mergeCells(metaDateRow.number, 1, metaDateRow.number, numCols);
-    metaDateRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
-
-    const metaSetorRow = ws.addRow(["Setor: PACKING HOUSE"]);
-    ws.mergeCells(metaSetorRow.number, 1, metaSetorRow.number, numCols);
-    metaSetorRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
-
-    ws.addRow([]);
-
-    const logoFile = await fetchLogoImage();
-    if (logoFile) {
-        const imageId = workbook.addImage({ buffer: logoFile.buffer, extension: logoFile.ext });
-        ws.addImage(imageId, { tl: { col: 0.1, row: 0.2 }, ext: { width: 140, height: 75 } });
-    }
+    await addHeader(workbook, ws, numCols, `CONTROLE DE HIGIENIZAÇÃO - ${activeArea.nome.toUpperCase()}`);
 
     const headerRow = ws.addRow(headers);
     headerRow.height = 24;
@@ -644,7 +556,7 @@ async function exportarBebedourosExcel({
         cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
     }
 
-    const mapBebedouroStatus = (value: string | null | undefined): string => {
+    const mapStatus = (value: string | null | undefined): string => {
         const normalized = String(value || "").trim().toUpperCase();
         if (normalized === "S" || normalized === "C" || normalized === "SIM") return "Sim";
         if (normalized === "N" || normalized === "NC" || normalized === "NÃO" || normalized === "NAO") return "Não";
@@ -655,20 +567,17 @@ async function exportarBebedourosExcel({
         const rowData: Array<string> = [
             formatSafeDate(log.data),
             log.local || '',
-            mapBebedouroStatus(log.limpeza),
-            mapBebedouroStatus(log.trocaFiltro),
-            mapBebedouroStatus(log.manutencao)
+            mapStatus(log.limpeza),
+            mapStatus(log.trocaFiltro),
+            mapStatus(log.manutencao)
         ];
-        if (hasObservacao) {
-            rowData.push(log.observacao || '');
-        }
-        if (hasAcaoCorretiva) {
-            rowData.push(log.acaoCorretiva || '');
-        }
+        if (hasObservacao) rowData.push(log.observacao || '');
+        if (hasAcaoCorretiva) rowData.push(log.acaoCorretiva || '');
         rowData.push('');
 
         const dataRow = ws.addRow(rowData);
         dataRow.height = 65;
+
         for (let i = 1; i <= numCols; i++) {
             const cell = dataRow.getCell(i);
             cell.border = { top: { style: "thin", color: { argb: "FFD1D5DB" } }, left: { style: "thin", color: { argb: "FFD1D5DB" } }, bottom: { style: "thin", color: { argb: "FFD1D5DB" } }, right: { style: "thin", color: { argb: "FFD1D5DB" } } };
@@ -682,70 +591,14 @@ async function exportarBebedourosExcel({
             }
         }
 
-        const signature = String(log.signature || "").trim();
-        if (signature) {
-            const signatureCell = dataRow.getCell(signatureColIndex);
-            signatureCell.value = formatName(signature);
-            signatureCell.font = { size: 9, bold: true };
-            signatureCell.alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
-
-            if (signature.startsWith("data:image")) {
-                try {
-                    const base64Data = signature.split(",")[1];
-                    const imgId = workbook.addImage({ base64: base64Data, extension: "png" });
-                    ws.addImage(imgId, { tl: { col: signatureColIndex - 1 + 0.25, row: dataRow.number - 1 + 0.15 }, ext: { width: 150, height: 60 }, editAs: "oneCell" });
-                } catch (e) { }
-            } else {
-                const imageFile = await fetchSignatureImage(signature);
-                if (imageFile) {
-                    const imgId = workbook.addImage({ buffer: imageFile.buffer, extension: imageFile.ext });
-                    ws.addImage(imgId, { tl: { col: signatureColIndex - 1 + 0.25, row: dataRow.number - 1 + 0.15 }, ext: { width: 150, height: 60 }, editAs: "oneCell" });
-                }
-            }
+        if (log.signature) {
+            await processSignatureCell(workbook, ws, dataRow, signatureColIndex, log.signature);
         }
     }
 
-    if (observacaoGeral && observacaoGeral.trim() !== "") {
-        ws.addRow([]);
-        const obsTitleRow = ws.addRow(["OBSERVAÇÕES DE NÃO CONFORMIDADE"]);
-        ws.mergeCells(obsTitleRow.number, 1, obsTitleRow.number, numCols);
-        obsTitleRow.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-        obsTitleRow.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFB91C1C" } };
-        obsTitleRow.height = 20;
-        const obsContentRow = ws.addRow([observacaoGeral]);
-        ws.mergeCells(obsContentRow.number, 1, obsContentRow.number, numCols);
-        obsContentRow.getCell(1).alignment = { horizontal: "left", vertical: "top", wrapText: true };
-        obsContentRow.height = 28;
-    }
-
-    ws.addRow([]);
-
-    const legendTitle = ws.addRow(["LEGENDA E PRODUTOS UTILIZADOS"]);
-    ws.mergeCells(legendTitle.number, 1, legendTitle.number, numCols);
-    legendTitle.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
-    legendTitle.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4B5563" } };
-    legendTitle.height = 24;
-
-    const legendLines = [
-        "• SIM: Procedimento executado e aprovado.",
-        "• NÃO: Procedimento não executado ou reprovado.",
-        "",
-        "Materiais Necessários:",
-        "• Balde, Esponja, Luvas Nitrílica, Bota PVC, Óculos de Proteção.",
-        "",
-        "Diluição dos Produtos:",
-        "• Preparar solução de 50 mL de detergente neutro para 10 litros de água.",
-        "• Preparar solução de 100 mL de hipoclorito de sódio para 10 litros de água.",
-    ];
-    legendLines.forEach((line) => {
-        const row = ws.addRow([line]);
-        ws.mergeCells(row.number, 1, row.number, numCols);
-        row.getCell(1).font = { size: 9 };
-        row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-        row.height = 18;
-    });
-
-    addRevisionControlSection(ws, numCols, activeArea.doc);
+    addObservation(ws, numCols, observacaoGeral);
+    addLegend(ws, numCols, buildBebedouroLegend());
+    addRevisionControl(ws, numCols, activeArea.doc);
 
     const buffer = await workbook.xlsx.writeBuffer();
     return new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });

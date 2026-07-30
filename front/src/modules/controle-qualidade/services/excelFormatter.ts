@@ -1,3 +1,5 @@
+"use client";
+
 import * as ExcelJS from "exceljs";
 import {
     LEGENDA_VIDROS,
@@ -57,8 +59,8 @@ const addTopSignature = (
     imageData: { buffer?: ArrayBuffer; base64?: string; ext: string },
     rowNumber: number,
     colNumber: number,
-    imgWidth: number = 180,
-    imgHeight: number = 50
+    imgWidth: number = 130,
+    imgHeight: number = 32
 ) => {
     const imgId = workbook.addImage(
         imageData.buffer
@@ -126,7 +128,8 @@ export const exportControleQualidadeToExcel = async ({
     let temAcaoCorretiva = false;
 
     if (activeTab === "vidros") {
-        headers = ["Verificar (Item)", "Status", "Ação Recomendada", "Observação", "Tempo de Correção"];
+        // 🔥 Atualizado para refletir a ordem correta: Observação/Local antes de Ação Recomendada
+        headers = ["Verificar (Item)", "Status", "Observação / Local", "Ação Recomendada", "Tempo de Correção"];
     } else if (activeTab === "pragas") {
         temAcaoCorretiva = pragasLogs.some(log => {
             const acao = log.grid?.['GERAL_AcaoCorretiva'];
@@ -165,7 +168,6 @@ export const exportControleQualidadeToExcel = async ({
 
     worksheet.addRow([]);
 
-    // 🔥 TÍTULOS (removido "PHU" do título de resíduos)
     const titulosMap: any = {
         vidros: "MONITORAMENTO DE VIDRO E PLÁSTICO RÍGIDO",
         pragas: "MONITORAMENTO DE VETORES E PRAGAS URBANAS",
@@ -179,21 +181,15 @@ export const exportControleQualidadeToExcel = async ({
     titleRow.getCell(1).font = { bold: true, size: 14, color: { argb: "FF000080" } };
     titleRow.height = 50;
 
-    // 🔥 LINHA: Exportado em (sempre presente)
-    worksheet.addRow([`Exportado em: ${new Date().toLocaleString("pt-BR")}`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
-
-    // 🔥 LINHA: Área (apenas para resíduos)
     if (activeTab === "residuos") {
         worksheet.addRow(["Área: Packing House"]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
     }
 
-    // 🔥 LINHA: Frequência (apenas vidros)
     if (activeTab === "vidros") {
         worksheet.addRow([`Frequência: Semanal`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
         worksheet.addRow([`Data da verificação: ${formatSafeDate(vidrosDate || new Date().toISOString().split("T")[0])}`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
     }
 
-    // 🔥 LINHA: Data de Registro (apenas pragas - removido para resíduos)
     if (activeTab === "pragas") {
         worksheet.addRow([`Data de Registro: ${new Date().toLocaleDateString("pt-BR")}`]).getCell(1).font = { bold: true, size: 10, color: { argb: "FF4B5563" } };
     }
@@ -217,7 +213,7 @@ export const exportControleQualidadeToExcel = async ({
                 if (file) imgData = { buffer: file.buffer, ext: file.ext };
             }
             if (imgData) {
-                addTopSignature(worksheet, workbook, imgData, row.number, 2, 180, 50);
+                addTopSignature(worksheet, workbook, imgData, row.number, 2, 130, 32);
             }
         }
     };
@@ -234,14 +230,12 @@ export const exportControleQualidadeToExcel = async ({
         await processSignature("Assinatura do Monitor:", vidrosMonitor);
         await processSignature("Assinatura do Resp. Packing:", vidrosResp);
     } else if (activeTab === "residuos") {
-        // Para resíduos, não adicionamos assinaturas no cabeçalho (as assinaturas estão nas linhas da tabela)
     } else {
         if (responsavel) await processSignature("Assinatura do Responsável:", responsavel);
         if (respPacking) await processSignature("Assinatura do Resp. Packing:", respPacking);
     }
     worksheet.addRow([]);
 
-    // --- LARGURAS DAS COLUNAS ---
     if (activeTab === "vidros") {
         worksheet.columns = [{ width: 30 }, { width: 12 }, { width: 35 }, { width: 35 }, { width: 20 }];
     } else if (activeTab === "pragas") {
@@ -267,11 +261,11 @@ export const exportControleQualidadeToExcel = async ({
         worksheet.columns = [{ width: 30 }, { width: 15 }, { width: 25 }, { width: 18 }, { width: 45 }, { width: 18 }, { width: 45 }];
     } else if (activeTab === "residuos") {
         worksheet.columns = [
-            { width: 25 }, // Data Período
-            { width: 12 }, // Terça
-            { width: 12 }, // Sexta
-            { width: 40 }, // Responsável / Recolhimento
-            { width: 40 }  // Monitor Responsável
+            { width: 25 },
+            { width: 12 },
+            { width: 12 },
+            { width: 40 },
+            { width: 40 }
         ];
     }
 
@@ -294,24 +288,14 @@ export const exportControleQualidadeToExcel = async ({
             if (file) imgData = { buffer: file.buffer, ext: file.ext };
         }
         if (imgData) {
-            addTopSignature(worksheet, workbook, imgData, rowNum, colNum, 180, 50);
+            addTopSignature(worksheet, workbook, imgData, rowNum, colNum, 130, 32);
         }
     };
 
     const applyRowStyle = (row: ExcelJS.Row, isSignatureRow = false) => {
-        row.height = isSignatureRow ? 70 : 28;
         row.eachCell((cell, colNumber) => {
             cell.border = { top: { style: "thin", color: { argb: "FFD1D5DB" } }, left: { style: "thin", color: { argb: "FFD1D5DB" } }, bottom: { style: "thin", color: { argb: "FFD1D5DB" } }, right: { style: "thin", color: { argb: "FFD1D5DB" } } };
             let verticalAlign = "middle";
-            if (isSignatureRow) {
-                if (activeTab === "inusuais" && (colNumber === 4 || colNumber === 5)) {
-                    verticalAlign = "bottom";
-                } else if (activeTab === "rejeitos" && (colNumber === 5 || colNumber === 7)) {
-                    verticalAlign = "bottom";
-                } else if (activeTab === "residuos" && (colNumber === 4 || colNumber === 5)) {
-                    verticalAlign = "bottom";
-                }
-            }
             cell.alignment = {
                 horizontal: "center",
                 vertical: verticalAlign as any,
@@ -320,16 +304,22 @@ export const exportControleQualidadeToExcel = async ({
         });
     };
 
-    // --- DADOS ---
     if (activeTab === "vidros") {
         const filteredRows = vidrosLogs.filter(r => r.item !== "Outros" && !(r.item?.startsWith("Outros:") && r.item.replace("Outros:", "").trim() === ""));
+
         for (let i = 0; i < filteredRows.length; i++) {
             const row = filteredRows[i];
             const itemSemPrefixoOutros = String(row.item || "").replace(/^Outros\s*:\s*/i, "").trim();
+
+            // 🔥 Mapeamento correto: Observação individual na linha e em seguida Ação Recomendada
             const dataRow = worksheet.addRow([
-                itemSemPrefixoOutros || row.item || "", row.conforme === "C" ? "SIM" : (row.conforme === "NC" ? "NÃO" : ""),
-                row.acaoRecomendada || "", i === 0 ? vidrosObs : "", row.tempoCorrecao || ""
+                itemSemPrefixoOutros || row.item || "",
+                row.conforme || "",
+                row.observacao || "",
+                row.acaoRecomendada || "",
+                row.tempoCorrecao || ""
             ]);
+
             applyRowStyle(dataRow);
         }
     } else if (activeTab === "pragas") {
@@ -416,31 +406,88 @@ export const exportControleQualidadeToExcel = async ({
                 worksheet.mergeCells(pacRow.number, 2, pacRow.number, 3);
                 worksheet.mergeCells(pacRow.number, 4, pacRow.number, 7);
                 applyRowStyle(pacRow, false);
-                pacRow.height = 40;
+
                 pacRow.getCell(1).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
                 pacRow.getCell(2).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
                 pacRow.getCell(4).alignment = { horizontal: "left", vertical: "middle", wrapText: true };
             }
         }
     } else if (activeTab === "residuos") {
+        const excecoesColetadas: { periodo: string, dia: string, motivo: string }[] = [];
+
         for (const residuo of residuosLogs) {
+
+            let tercaVal = "—";
+            if (residuo.terca === "SIM") {
+                tercaVal = "SIM";
+            } else if (residuo.terca && residuo.terca.trim() !== "") {
+                tercaVal = "NÃO";
+                excecoesColetadas.push({ periodo: residuo.dataPeriodo || "", dia: "Terça", motivo: residuo.terca });
+            }
+
+            let sextaVal = "—";
+            if (residuo.sexta === "SIM") {
+                sextaVal = "SIM";
+            } else if (residuo.sexta && residuo.sexta.trim() !== "") {
+                sextaVal = "NÃO";
+                excecoesColetadas.push({ periodo: residuo.dataPeriodo || "", dia: "Sexta", motivo: residuo.sexta });
+            }
+
             const dataRow = worksheet.addRow([
                 residuo.dataPeriodo || "",
-                residuo.terca === "SIM" ? "SIM" : "NÃO",
-                residuo.sexta === "SIM" ? "SIM" : "NÃO",
+                tercaVal,
+                sextaVal,
                 formatName(residuo.responsavelRecolhimento),
                 formatName(residuo.monitorResponsavel)
             ]);
             applyRowStyle(dataRow, true);
+
             dataRow.getCell(4).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
             dataRow.getCell(5).alignment = { horizontal: "center", vertical: "bottom", wrapText: true };
 
             await addTableSignature(residuo.responsavelRecolhimento, dataRow.number, 4);
             await addTableSignature(residuo.monitorResponsavel, dataRow.number, 5);
         }
+
+        if (excecoesColetadas.length > 0) {
+            worksheet.addRow([]);
+
+            const excTitle = worksheet.addRow(["REGISTRO DE EXCEÇÕES E FERIADOS"]);
+            worksheet.mergeCells(excTitle.number, 1, excTitle.number, maxCol);
+            excTitle.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF991B1B" } };
+            excTitle.getCell(1).font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+            excTitle.getCell(1).alignment = { horizontal: "center", vertical: "middle" };
+            excTitle.height = 30;
+
+            const excHeaders = worksheet.addRow(["Data Período", "Dia da Semana", "Motivo da Exceção (Observação)", "", ""]);
+            worksheet.mergeCells(excHeaders.number, 3, excHeaders.number, 5);
+            excHeaders.eachCell((cell) => {
+                cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEE2E2" } };
+                cell.font = { bold: true, color: { argb: "FF991B1B" } };
+                cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+                cell.alignment = { horizontal: "center", vertical: "middle" };
+            });
+
+            for (const exc of excecoesColetadas) {
+                const excRow = worksheet.addRow([
+                    exc.periodo,
+                    exc.dia,
+                    exc.motivo, "", ""
+                ]);
+                worksheet.mergeCells(excRow.number, 3, excRow.number, 5);
+
+                excRow.eachCell((cell, colNumber) => {
+                    cell.border = { top: { style: "thin", color: { argb: "FFD1D5DB" } }, left: { style: "thin", color: { argb: "FFD1D5DB" } }, bottom: { style: "thin", color: { argb: "FFD1D5DB" } }, right: { style: "thin", color: { argb: "FFD1D5DB" } } };
+                    cell.alignment = {
+                        horizontal: colNumber === 3 ? "left" : "center",
+                        vertical: "middle",
+                        wrapText: true
+                    };
+                });
+            }
+        }
     }
 
-    // --- LEGENDA ---
     worksheet.addRow([]);
 
     const legendasMap: Record<string, string[]> = {
@@ -479,18 +526,10 @@ export const exportControleQualidadeToExcel = async ({
     worksheet.mergeCells(revTitleRow.number, 1, revTitleRow.number, maxCol);
     revTitleRow.getCell(1).font = { bold: true, size: 10, color: { argb: "FF1F2937" } };
 
-    const codeMap: any = {
-        vidros: "PHU-035",
-        pragas: "PHU-042",
-        inusuais: "PHU-041",
-        rejeitos: "PHU-034",
-        residuos: "PHU-027"
-    };
-
     const reviewInfo = [
         ["Aprovado/Revisador:", "Clebitania Carvalho"],
         ["Data da última revisão:", "02/01/2026"],
-        ["Código do documento:", codeMap[activeTab] || "GERAL"]
+        ["Código do documento:", "PHU-035"]
     ];
 
     reviewInfo.forEach(([label, value]) => {

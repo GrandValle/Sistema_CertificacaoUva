@@ -1,12 +1,19 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { SignatureSelector } from "../../../components/SignatureSelector";
 import Link from "next/link";
-import { BiHistory, BiTrash, BiPlus, BiWrench, BiTachometer, BiCog, BiListUl, BiCalendarCheck, BiErrorAlt, BiPen, BiDownload } from "react-icons/bi";
+import { BiHistory, BiTrash, BiPlus, BiWrench, BiTachometer, BiCog, BiListUl, BiCalendarCheck, BiErrorAlt, BiPen, BiDownload, BiRefresh } from "react-icons/bi";
 import { useManutencaoController } from "../controller/useManutencaoController";
 import { COMPLIANCE_MANUTENCAO, ITENS_SEMANAL_PHU040, ITENS_MENSAL_PHU040, FrequenciaAfericao } from "../model/manutencaoModel";
 
 export default function ManutencaoCalibracaoPage() {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const {
     activeTab, setActiveTab, frequencia, setFrequencia, freqChecklist, setFreqChecklist,
     balancasLogs, addBalancaRow, updateBalancaRow, removeBalancaRow,
@@ -15,6 +22,14 @@ export default function ManutencaoCalibracaoPage() {
     inspecoesMensais, addMensal, removeMensal, updateMensal, toggleMensalResposta,
     exportarExcel
   } = useManutencaoController();
+
+  if (!isMounted) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+        <p className="text-slate-400 font-bold text-xs uppercase tracking-widest">Carregando sistema...</p>
+      </div>
+    );
+  }
 
   const phuAtivo = activeTab === "balancas"
     ? COMPLIANCE_MANUTENCAO.pops.balancas
@@ -27,17 +42,32 @@ export default function ManutencaoCalibracaoPage() {
     if (activeElement && ["INPUT", "TEXTAREA", "SELECT"].includes(activeElement.tagName)) activeElement.blur();
   };
 
-  const renderToggle = (status: "SIM" | "NÃO" | null, onClick: () => void) => (
-    <button
-      onClick={onClick}
-      className={`w-full py-2.5 rounded-lg font-black text-xs transition-all border shadow-sm ${status === 'SIM' ? 'bg-green-100 text-green-700 border-green-200' :
-        status === 'NÃO' ? 'bg-red-100 text-red-700 border-red-200' :
-          'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-        }`}
-    >
-      {status || 'PENDENTE'}
-    </button>
-  );
+  // 🟢 NOVA LÓGICA INTELIGENTE DE CORES
+  const renderToggle = (status: "SIM" | "NÃO" | null, itemName: string, onClick: () => void) => {
+    // Verifica se a pergunta é sobre "problemas" (onde NÃO é a resposta boa)
+    const isNegativeContext = itemName.toLowerCase().match(/(resíduo|presença|desprendimento|sujeira|graxa)/);
+
+    let colorClass = 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'; // PENDENTE
+
+    if (status === 'SIM') {
+      colorClass = isNegativeContext
+        ? 'bg-red-100 text-red-700 border-red-200' // SIM para problema = Ruim (Vermelho)
+        : 'bg-green-100 text-green-700 border-green-200'; // SIM para limpeza = Bom (Verde)
+    } else if (status === 'NÃO') {
+      colorClass = isNegativeContext
+        ? 'bg-green-100 text-green-700 border-green-200' // NÃO para problema = Bom (Verde)
+        : 'bg-red-100 text-red-700 border-red-200'; // NÃO para limpeza = Ruim (Vermelho)
+    }
+
+    return (
+      <button
+        onClick={onClick}
+        className={`w-full py-2.5 rounded-lg font-black text-xs transition-all border shadow-sm ${colorClass}`}
+      >
+        {status || 'PENDENTE'}
+      </button>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-slate-100 p-4 md:p-6 font-sans relative">
@@ -96,7 +126,7 @@ export default function ManutencaoCalibracaoPage() {
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-5 py-4 flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-slate-700">Período de inspeção</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Selecione a frequência para visualizar ou adicionar registros</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Selecione a frequência para visualizar ou adicionar colunas de registros</p>
               </div>
               <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
                 <button
@@ -110,106 +140,188 @@ export default function ManutencaoCalibracaoPage() {
               </div>
             </div>
 
+            {/* TABELA UNIFICADA EM COLUNAS LADO A LADO */}
             {freqChecklist === "Semanal" ? (
-              inspecoesSemanais.map((inspecao) => (
-                <div key={inspecao.id} className="bg-white rounded-2xl shadow-sm border-2 border-slate-200 overflow-hidden mb-4 transition-all">
-                  <div className="p-4 flex items-center justify-between bg-slate-50 border-b-2 border-slate-200">
-                    <div className="flex items-center gap-4">
-                      <div className="bg-slate-800 text-amber-400 p-2.5 rounded-xl shadow-inner shrink-0"><BiListUl size={20} /></div>
-                      <div>
-                        <label className="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Data da Inspeção</label>
-                        <div className={`relative transition-all duration-200 ${inspecao.data ? "w-40" : "w-35"}`}>
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
-                            <BiCalendarCheck size={14} />
-                          </span>
-                          <input type="date" value={inspecao.data} onChange={e => updateSemanal(inspecao.id, "data", e.target.value)} className="w-full border-2 border-slate-200 rounded-lg py-2 pl-8 pr-8 text-[11px] font-semibold text-slate-800 outline-none focus:border-slate-500 bg-white" />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {inspecoesSemanais.length > 1 && (
-                        <button onClick={() => removeSemanal(inspecao.id)} className="text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 p-2 rounded-lg transition-colors shadow-sm border border-slate-200"><BiTrash size={20} /></button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto animate-fade-in">
-                    <table className="w-full text-left text-sm">
-                      <thead>
-                        <tr className="border-b-2 border-slate-200 bg-slate-100">
-                          <th className="p-4 font-black text-slate-700 w-3/4 border-r-2 border-slate-200 uppercase tracking-widest text-[11px]">Itens Verificados (Semanal)</th>
-                          <th className="p-4 w-1/4 text-center font-black text-slate-700 uppercase tracking-widest text-[11px]">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {ITENS_SEMANAL_PHU040.map((item, index) => (
-                          <tr key={index} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-4 border-r-2 border-slate-100 flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-slate-300 shrink-0"></div><span className="font-bold text-slate-700 text-xs">{item}</span></td>
-                            <td className="p-3 align-middle"><div className="max-w-[140px] mx-auto">{renderToggle(inspecao.respostas[index] || null, () => toggleSemanalResposta(inspecao.id, index))}</div></td>
-                          </tr>
+              <div className="bg-white rounded-2xl shadow-sm border-2 border-slate-200 overflow-hidden transition-all">
+                <div className="overflow-x-auto animate-fade-in">
+                  <table className="w-full text-left text-sm table-fixed">
+                    <thead>
+                      <tr className="border-b-2 border-slate-200 bg-slate-100">
+                        <th className="p-4 font-black text-slate-700 w-[300px] border-r-2 border-slate-200 uppercase tracking-widest text-[11px]">
+                          Itens Verificados
+                        </th>
+                        {inspecoesSemanais.map((inspecao, colIndex) => (
+                          <th key={inspecao.id} className="p-3 border-r-2 border-slate-200 bg-slate-50 w-[270px]">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <span className={`bg-slate-900 text-white text-[10px] font-black px-2 py-0.5 rounded tracking-widest ${inspecoesSemanais.length > 1 ? '' : 'invisible'}`}>
+                                Coluna #{colIndex + 1}
+                              </span>
+                              {inspecoesSemanais.length > 1 && (
+                                <button onClick={() => removeSemanal(inspecao.id)} className="text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 p-1 rounded transition-colors shadow-sm border border-slate-200 ml-auto" title="Remover coluna">
+                                  <BiTrash size={15} />
+                                </button>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                                <BiCalendarCheck size={13} />
+                              </span>
+                              <input
+                                type="date"
+                                value={inspecao.data}
+                                onChange={e => updateSemanal(inspecao.id, "data", e.target.value)}
+                                className="w-full border border-slate-300 rounded-lg py-1.5 pl-7 pr-2 text-[11px] font-bold text-slate-800 outline-none focus:border-slate-500 bg-white shadow-sm"
+                              />
+                            </div>
+                          </th>
                         ))}
-                        <tr className="bg-amber-50/50">
-                          <td className="p-4 border-r-2 border-slate-100 font-black text-amber-800 uppercase tracking-widest text-[11px] flex items-center gap-2"><BiErrorAlt size={18} className="text-amber-500" /> Ação Corretiva</td>
-                          <td className="p-3"><textarea value={inspecao.acaoCorretiva} onChange={e => updateSemanal(inspecao.id, "acaoCorretiva", e.target.value)} className="w-full border-2 border-slate-200 rounded-xl p-3 text-xs font-normal text-slate-900 outline-none focus:border-amber-400 bg-white min-h-24 resize-none shadow-sm" placeholder="O que foi feito?"></textarea></td>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {ITENS_SEMANAL_PHU040.map((item, itemIndex) => (
+                        <tr key={itemIndex} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="p-4 border-r-2 border-slate-100 flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-slate-300 shrink-0"></div>
+                            <span className="font-bold text-slate-700 text-xs">{item}</span>
+                          </td>
+                          {inspecoesSemanais.map((inspecao) => (
+                            <td key={inspecao.id} className="p-3 border-r border-slate-100 align-middle text-center w-[270px]">
+                              <div className="w-[180px] mx-auto">
+                                {/* 🟢 Adicionado 'item' como argumento para ler o contexto da pergunta */}
+                                {renderToggle(inspecao.respostas[itemIndex] || null, item, () => toggleSemanalResposta(inspecao.id, itemIndex))}
+                              </div>
+                            </td>
+                          ))}
                         </tr>
-                        <tr className="bg-slate-100/50">
-                          <td className="p-4 border-r-2 border-slate-100 font-black text-slate-800 uppercase tracking-widest text-[11px] flex items-center gap-2"><BiPen size={18} className="text-slate-500" /> Assinatura do Responsável</td>
-                          <td className="p-3"><div className={`border-2 rounded-xl p-1 min-h-[48px] max-w-[200px] mx-auto shadow-sm transition-colors ${inspecao.responsavel ? "border-green-400 bg-white" : "border-slate-200 bg-white"}`} onPointerDownCapture={prepareSignatureInteraction}><SignatureSelector value={inspecao.responsavel} onChange={v => updateSemanal(inspecao.id, "responsavel", v)} /></div></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+
+                      {/* LINHA DE AÇÃO CORRETIVA */}
+                      <tr className="bg-amber-50/40">
+                        <td className="p-4 border-r-2 border-slate-100 font-black text-amber-800 uppercase tracking-widest text-[11px] flex items-center gap-2">
+                          <BiErrorAlt size={18} className="text-amber-500" /> Ação Corretiva
+                        </td>
+                        {inspecoesSemanais.map((inspecao) => (
+                          <td key={inspecao.id} className="p-3 border-r border-slate-100 align-top w-[270px]">
+                            <textarea
+                              value={inspecao.acaoCorretiva}
+                              onChange={e => updateSemanal(inspecao.id, "acaoCorretiva", e.target.value)}
+                              className="w-full border border-slate-200 rounded-xl p-2 text-xs font-normal text-slate-900 outline-none focus:border-amber-400 bg-white min-h-[80px] resize-none shadow-sm"
+                              placeholder="O que foi feito?"
+                            ></textarea>
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* LINHA DE ASSINATURA */}
+                      <tr className="bg-slate-100/50">
+                        <td className="p-4 border-r-2 border-slate-100 font-black text-slate-800 uppercase tracking-widest text-[11px] flex items-center gap-2">
+                          <BiPen size={18} className="text-slate-500" /> Assinatura do Responsável
+                        </td>
+                        {inspecoesSemanais.map((inspecao) => (
+                          <td key={inspecao.id} className="p-3 border-r border-slate-100 align-top w-[270px]">
+                            <div className={`border-2 rounded-xl p-1.5 min-h-[70px] shadow-sm transition-colors text-center flex flex-col justify-center ${inspecao.responsavel ? "border-green-400 bg-white" : "border-slate-200 bg-white"}`} onPointerDownCapture={prepareSignatureInteraction}>
+                              <div className="text-[10px] font-bold leading-tight break-words px-1">
+                                <SignatureSelector value={inspecao.responsavel} onChange={v => updateSemanal(inspecao.id, "responsavel", v)} />
+                              </div>
+                            </div>
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-              ))
+              </div>
             ) : (
-              inspecoesMensais.map((inspecao) => (
-                <div key={inspecao.id} className="bg-white rounded-2xl shadow-sm border-2 border-slate-200 overflow-hidden mb-4 transition-all">
-                  <div className="p-4 flex items-center justify-between bg-slate-50 border-b-2 border-slate-200">
-                    <div className="flex items-center gap-4">
-                      <div className="bg-slate-800 text-amber-400 p-2.5 rounded-xl shadow-inner shrink-0"><BiCalendarCheck size={20} /></div>
-                      <div>
-                        <label className="block text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">Data da Inspeção</label>
-                        <div className={`relative transition-all duration-200 ${inspecao.data ? "w-40" : "w-28"}`}>
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
-                            <BiCalendarCheck size={14} />
-                          </span>
-                          <input type="date" value={inspecao.data} onChange={e => updateMensal(inspecao.id, "data", e.target.value)} className="w-full border-2 border-slate-200 rounded-lg py-2 pl-8 pr-8 text-[11px] font-semibold text-slate-800 outline-none focus:border-slate-500 bg-white" />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {inspecoesMensais.length > 1 && (
-                        <button onClick={() => removeMensal(inspecao.id)} className="text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 p-2 rounded-lg transition-colors shadow-sm border border-slate-200"><BiTrash size={20} /></button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto animate-fade-in">
-                    <table className="w-full text-left text-sm">
-                      <thead>
-                        <tr className="border-b-2 border-slate-200 bg-slate-100">
-                          <th className="p-4 font-black text-slate-700 w-3/4 border-r-2 border-slate-200 uppercase tracking-widest text-[11px]">Itens Verificados (Mensal)</th>
-                          <th className="p-4 w-1/4 text-center font-black text-slate-700 uppercase tracking-widest text-[11px]">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {ITENS_MENSAL_PHU040.map((item, index) => (
-                          <tr key={index} className="hover:bg-slate-50 transition-colors">
-                            <td className="p-4 border-r-2 border-slate-100 flex items-center gap-3"><div className="w-2 h-2 rounded-full bg-slate-300 shrink-0"></div><span className="font-bold text-slate-700 text-xs">{item}</span></td>
-                            <td className="p-3 align-middle"><div className="max-w-[140px] mx-auto">{renderToggle(inspecao.respostas[index] || null, () => toggleMensalResposta(inspecao.id, index))}</div></td>
-                          </tr>
+              /* TABELA MENSAL EM COLUNAS LADO A LADO */
+              <div className="bg-white rounded-2xl shadow-sm border-2 border-slate-200 overflow-hidden transition-all">
+                <div className="overflow-x-auto animate-fade-in">
+                  <table className="w-full text-left text-sm table-fixed">
+                    <thead>
+                      <tr className="border-b-2 border-slate-200 bg-slate-100">
+                        <th className="p-4 font-black text-slate-700 w-[300px] border-r-2 border-slate-200 uppercase tracking-widest text-[11px]">
+                          Itens Verificados
+                        </th>
+                        {inspecoesMensais.map((inspecao, colIndex) => (
+                          <th key={inspecao.id} className="p-3 border-r-2 border-slate-200 bg-slate-50 w-[270px]">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <span className={`bg-slate-900 text-white text-[10px] font-black px-2 py-0.5 rounded tracking-widest ${inspecoesMensais.length > 1 ? '' : 'invisible'}`}>
+                                Coluna #{colIndex + 1}
+                              </span>
+                              {inspecoesMensais.length > 1 && (
+                                <button onClick={() => removeMensal(inspecao.id)} className="text-slate-400 hover:text-red-600 bg-white hover:bg-red-50 p-1 rounded transition-colors shadow-sm border border-slate-200 ml-auto" title="Remover coluna">
+                                  <BiTrash size={15} />
+                                </button>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                                <BiCalendarCheck size={13} />
+                              </span>
+                              <input
+                                type="date"
+                                value={inspecao.data}
+                                onChange={e => updateMensal(inspecao.id, "data", e.target.value)}
+                                className="w-full border border-slate-300 rounded-lg py-1.5 pl-7 pr-2 text-[11px] font-bold text-slate-800 outline-none focus:border-slate-500 bg-white shadow-sm"
+                              />
+                            </div>
+                          </th>
                         ))}
-                        <tr className="bg-amber-50/50">
-                          <td className="p-4 border-r-2 border-slate-100 font-black text-amber-800 uppercase tracking-widest text-[11px] flex items-center gap-2"><BiErrorAlt size={18} className="text-amber-500" /> Ação Corretiva</td>
-                          <td className="p-3"><textarea value={inspecao.acaoCorretiva} onChange={e => updateMensal(inspecao.id, "acaoCorretiva", e.target.value)} className="w-full border-2 border-slate-200 rounded-xl p-3 text-xs font-normal text-slate-900 outline-none focus:border-amber-400 bg-white min-h-24 resize-none shadow-sm" placeholder="O que foi feito?"></textarea></td>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {ITENS_MENSAL_PHU040.map((item, itemIndex) => (
+                        <tr key={itemIndex} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="p-4 border-r-2 border-slate-100 flex items-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-slate-300 shrink-0"></div>
+                            <span className="font-bold text-slate-700 text-xs">{item}</span>
+                          </td>
+                          {inspecoesMensais.map((inspecao) => (
+                            <td key={inspecao.id} className="p-3 border-r border-slate-100 align-middle text-center w-[270px]">
+                              <div className="w-[180px] mx-auto">
+                                {/* 🟢 Adicionado 'item' como argumento para ler o contexto da pergunta também no Mensal */}
+                                {renderToggle(inspecao.respostas[itemIndex] || null, item, () => toggleMensalResposta(inspecao.id, itemIndex))}
+                              </div>
+                            </td>
+                          ))}
                         </tr>
-                        <tr className="bg-slate-100/50">
-                          <td className="p-4 border-r-2 border-slate-100 font-black text-slate-800 uppercase tracking-widest text-[11px] flex items-center gap-2"><BiPen size={18} className="text-slate-500" /> Assinatura do Responsável</td>
-                          <td className="p-3"><div className={`border-2 rounded-xl p-1 min-h-[48px] max-w-[200px] mx-auto shadow-sm transition-colors ${inspecao.responsavel ? "border-green-400 bg-white" : "border-slate-200 bg-white"}`} onPointerDownCapture={prepareSignatureInteraction}><SignatureSelector value={inspecao.responsavel} onChange={v => updateMensal(inspecao.id, "responsavel", v)} /></div></td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+
+                      {/* LINHA DE AÇÃO CORRETIVA MENSAL */}
+                      <tr className="bg-amber-50/40">
+                        <td className="p-4 border-r-2 border-slate-100 font-black text-amber-800 uppercase tracking-widest text-[11px] flex items-center gap-2">
+                          <BiErrorAlt size={18} className="text-amber-500" /> Ação Corretiva
+                        </td>
+                        {inspecoesMensais.map((inspecao) => (
+                          <td key={inspecao.id} className="p-3 border-r border-slate-100 align-top w-[270px]">
+                            <textarea
+                              value={inspecao.acaoCorretiva}
+                              onChange={e => updateMensal(inspecao.id, "acaoCorretiva", e.target.value)}
+                              className="w-full border border-slate-200 rounded-xl p-2 text-xs font-normal text-slate-900 outline-none focus:border-amber-400 bg-white min-h-[80px] resize-none shadow-sm"
+                              placeholder="O que foi feito?"
+                            ></textarea>
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* LINHA DE ASSINATURA MENSAL */}
+                      <tr className="bg-slate-100/50">
+                        <td className="p-4 border-r-2 border-slate-100 font-black text-slate-800 uppercase tracking-widest text-[11px] flex items-center gap-2">
+                          <BiPen size={18} className="text-slate-500" /> Assinatura do Responsável
+                        </td>
+                        {inspecoesMensais.map((inspecao) => (
+                          <td key={inspecao.id} className="p-3 border-r border-slate-100 align-top w-[270px]">
+                            <div className={`border-2 rounded-xl p-1.5 min-h-[70px] shadow-sm transition-colors text-center flex flex-col justify-center ${inspecao.responsavel ? "border-green-400 bg-white" : "border-slate-200 bg-white"}`} onPointerDownCapture={prepareSignatureInteraction}>
+                              <div className="text-[10px] font-bold leading-tight break-words px-1">
+                                <SignatureSelector value={inspecao.responsavel} onChange={v => updateMensal(inspecao.id, "responsavel", v)} />
+                              </div>
+                            </div>
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-              ))
+              </div>
             )}
           </div>
         )}
@@ -353,7 +465,7 @@ export default function ManutencaoCalibracaoPage() {
           </div>
         )}
 
-        {/* ABA BALANÇAS - FREQUÊNCIA FIXA "DIÁRIO" */}
+        {/* ABA BALANÇAS - VISÃO COMPACTA E OTIMIZADA */}
         {activeTab === "balancas" && (
           <div className="animate-fade-in space-y-4">
             <div className="bg-slate-900 rounded-2xl px-5 py-4 flex flex-wrap items-center gap-4 shadow-md border border-slate-700">
@@ -362,70 +474,174 @@ export default function ManutencaoCalibracaoPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-base font-black uppercase tracking-tight text-white">Registro de Aferição de Balanças</h2>
-                <p className="text-slate-400 text-xs mt-0.5">Monitoramento de variação e rastreabilidade de calibração • PHU-044</p>
+                <p className="text-slate-400 text-xs mt-0.5">Monitoramento diário das balanças da planta em lote • PHU-044</p>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Freq:</span>
                 <span className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-black uppercase border border-amber-200">
                   Diário
                 </span>
               </div>
-              <button onClick={addBalancaRow} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-black text-xs uppercase shadow active:scale-95 transition-all w-full sm:w-auto">
-                <BiPlus size={17} className="inline mr-1" /> Nova Linha
+              <button onClick={addBalancaRow} className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-black text-xs uppercase shadow active:scale-95 transition-all flex items-center justify-center gap-2">
+                <BiPlus size={17} /> Nova Verificação do Dia
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm min-w-[980px]">
-                  <thead className="bg-slate-100 border-b border-slate-200 uppercase text-[10px] font-black text-slate-700 tracking-widest">
-                    <tr>
-                      <th className="p-4 w-32 border-r border-slate-200">Data</th>
-                      <th className="p-4 w-36 border-r border-slate-200 text-center">Balança (ID)</th>
-                      <th className="p-4 w-32 border-r border-slate-200 text-center">Medida (K/G)</th>
-                      <th className="p-4 w-36 border-r border-slate-200 text-center">Variação?</th>
-                      <th className="p-4 w-32 border-r border-slate-200 text-center">Variação Kg</th>
-                      <th className="p-4 w-56 border-r border-slate-200">Ação Corretiva</th>
-                      <th className="p-4 w-56 border-r border-slate-200">Assinatura</th>
-                      <th className="p-4 w-12 text-center"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {balancasLogs.map((row) => (
-                      <tr key={row.id} className="hover:bg-amber-50/40 transition-colors">
-                        <td className="p-2 border-r border-slate-100">
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none">
-                              <BiCalendarCheck size={14} />
-                            </span>
-                            <input type="date" value={row.dataCalibracao} onChange={(e) => updateBalancaRow(row.id, "dataCalibracao", e.target.value)} className="w-full border-2 border-slate-200 bg-white py-2 pl-8 pr-8 rounded-lg text-xs font-bold outline-none focus:border-amber-500 text-slate-900" />
-                          </div>
-                        </td>
-                        <td className="p-2 border-r border-slate-100"><input type="text" value={row.identificacaoBalanca} onChange={(e) => updateBalancaRow(row.id, "identificacaoBalanca", e.target.value)} className="w-full border-2 border-slate-200 bg-white p-2 rounded-lg text-xs font-black text-center outline-none focus:border-amber-500 text-slate-900" placeholder="Nº..." /></td>
-                        <td className="p-2 border-r border-slate-100"><input type="text" value={row.quantidadeMedida} onChange={(e) => updateBalancaRow(row.id, "quantidadeMedida", e.target.value)} className="w-full border-2 border-slate-200 bg-white p-2 rounded-lg text-xs font-black text-center outline-none focus:border-amber-500 text-slate-900" placeholder="0.00" /></td>
-                        <td className="p-2 border-r border-slate-100 text-center">
-                          <div className="flex gap-1.5 bg-slate-50 p-1 rounded-lg border-2 border-slate-200">
-                            <button onClick={() => updateBalancaRow(row.id, "houveVariacao", row.houveVariacao === "SIM" ? null : "SIM")} className={`flex-1 p-1.5 rounded-md text-[10px] font-black transition-colors ${row.houveVariacao === "SIM" ? "bg-amber-500 text-white shadow-sm" : "bg-transparent text-slate-600"}`}>SIM</button>
-                            <button onClick={() => updateBalancaRow(row.id, "houveVariacao", row.houveVariacao === "NÃO" ? null : "NÃO")} className={`flex-1 p-1.5 rounded-md text-[10px] font-black transition-colors ${row.houveVariacao === "NÃO" ? "bg-green-600 text-white shadow-sm" : "bg-transparent text-slate-600"}`}>NÃO</button>
-                          </div>
-                        </td>
-                        <td className="p-2 border-r border-slate-100"><input type="text" disabled={row.houveVariacao !== "SIM"} value={row.quantidadeVariacao} onChange={(e) => updateBalancaRow(row.id, "quantidadeVariacao", e.target.value)} className={`w-full border-2 border-slate-200 p-2 rounded-lg text-xs text-center outline-none ${row.houveVariacao === "SIM" ? "bg-white text-slate-900 font-black focus:border-amber-500" : "bg-slate-100 text-slate-500 cursor-not-allowed font-medium"}`} placeholder={row.houveVariacao === "SIM" ? "0.00" : "-"} /></td>
-                        <td className="p-2 border-r border-slate-100"><input type="text" disabled={row.houveVariacao !== "SIM"} value={row.acaoCorretiva} onChange={(e) => updateBalancaRow(row.id, "acaoCorretiva", e.target.value)} className={`w-full border-2 border-slate-200 p-2 rounded-lg text-xs font-normal outline-none ${row.houveVariacao === "SIM" ? "bg-white text-slate-900 focus:border-amber-500" : "bg-slate-100 text-slate-500 cursor-not-allowed"}`} placeholder={row.houveVariacao === "SIM" ? "Descreva..." : "-"} /></td>
-                        <td className="p-2 border-r border-slate-100"><div className={`border-2 rounded-lg p-1 min-h-11 transition-colors ${row.responsavel ? "border-green-400 bg-white" : "border-slate-200 bg-white"}`} onPointerDownCapture={prepareSignatureInteraction}><SignatureSelector value={row.responsavel} onChange={(v) => updateBalancaRow(row.id, "responsavel", v)} /></div></td>
-                        <td className="p-2 text-center"><button onClick={() => removeBalancaRow(row.id)} className="p-1.5 text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 rounded-lg transition-colors"><BiTrash size={20} /></button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="p-4 bg-slate-50 border-t border-slate-200"><p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">OBS.: As balanças são aferidas diariamente sempre que houver processamento.</p></div>
+            {/* LISTA EM CARDS COMPACTOS */}
+            <div className="space-y-3">
+              {balancasLogs.map((row, index) => (
+                <div key={row.id} className="bg-white rounded-2xl border-2 border-slate-200 shadow-sm p-4 transition-all hover:border-slate-300">
+
+                  {/* CABEÇALHO DO CARD (LINHA ÚNICA SUPERIOR) */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-3 mb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <span className="bg-slate-900 text-white text-[11px] font-black px-2.5 py-1 rounded-lg tracking-widest">
+                        #{String(balancasLogs.length - index).padStart(2, "0")}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-slate-400 text-xs"><BiCalendarCheck size={14} /></span>
+                        <input
+                          type="date"
+                          value={row.dataCalibracao}
+                          onChange={(e) => updateBalancaRow(row.id, "dataCalibracao", e.target.value)}
+                          className="border border-slate-200 bg-slate-50 rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {balancasLogs.length > 1 && (
+                      <button onClick={() => removeBalancaRow(row.id)} className="text-slate-400 hover:text-red-600 bg-slate-50 hover:bg-red-50 p-1.5 rounded-lg transition-colors border border-slate-200 flex items-center gap-1 text-[11px] font-bold">
+                        <BiTrash size={15} /> Remover
+                      </button>
+                    )}
+                  </div>
+
+                  {/* CAMPOS EM GRADE COMPACTA */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+
+                    {/* Balanças Verificadas */}
+                    <div className="lg:col-span-2">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                        Balanças Verificadas
+                      </label>
+                      <input
+                        type="text"
+                        value={row.balancasVerificadas || ""}
+                        onChange={(e) => updateBalancaRow(row.id, "balancasVerificadas", e.target.value)}
+                        className="w-full border border-slate-200 bg-slate-50 focus:bg-white p-2 rounded-xl text-xs font-medium outline-none focus:border-amber-500 text-slate-800"
+                        placeholder="Números..."
+                      />
+                    </div>
+
+                    {/* Qtd Medida */}
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                        Qtd Medida (G)
+                      </label>
+                      <input
+                        type="text"
+                        value={row.quantidadeMedida || ""}
+                        onChange={(e) => updateBalancaRow(row.id, "quantidadeMedida", e.target.value)}
+                        className="w-full border border-slate-200 bg-slate-50 focus:bg-white p-2 rounded-xl text-xs font-black text-center outline-none focus:border-amber-500 text-slate-900"
+                        placeholder="0.00"
+                      />
+                    </div>
+
+                    {/* Houve Variação? */}
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                        Variação?
+                      </label>
+                      <div className="flex gap-1 bg-slate-50 p-1 rounded-xl border border-slate-200 h-[34px] items-center">
+                        <button
+                          type="button"
+                          onClick={() => updateBalancaRow(row.id, "houveVariacao", "SIM")}
+                          className={`flex-1 py-1 rounded-lg text-[10px] font-black transition-all ${row.houveVariacao === "SIM" ? "bg-amber-500 text-white shadow-sm" : "bg-transparent text-slate-600 hover:text-slate-900"}`}
+                        >
+                          SIM
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateBalancaRow(row.id, "houveVariacao", "NÃO")}
+                          className={`flex-1 py-1 rounded-lg text-[10px] font-black transition-all ${row.houveVariacao === "NÃO" ? "bg-green-600 text-white shadow-sm" : "bg-transparent text-slate-600 hover:text-slate-900"}`}
+                        >
+                          NÃO
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Qtd Variação */}
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                        Qtd Variação (G)
+                      </label>
+                      <input
+                        type="text"
+                        disabled={row.houveVariacao !== "SIM"}
+                        value={row.quantidadeVariacao || ""}
+                        onChange={(e) => updateBalancaRow(row.id, "quantidadeVariacao", e.target.value)}
+                        className={`w-full border border-slate-200 p-2 rounded-xl text-xs text-center outline-none transition-colors ${row.houveVariacao === "SIM" ? "bg-white text-slate-900 font-black focus:border-amber-500" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
+                        placeholder={row.houveVariacao === "SIM" ? "0.00" : "-"}
+                      />
+                    </div>
+
+                    {/* Balança com Desvio */}
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                        Nº da Balança com Variação
+                      </label>
+                      <input
+                        type="text"
+                        disabled={row.houveVariacao !== "SIM"}
+                        value={row.balancaComDesvio || ""}
+                        onChange={(e) => updateBalancaRow(row.id, "balancaComDesvio", e.target.value)}
+                        className={`w-full border border-slate-200 p-2 rounded-xl text-xs text-center outline-none transition-colors ${row.houveVariacao === "SIM" ? "bg-white text-slate-900 font-black focus:border-amber-500" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
+                        placeholder={row.houveVariacao === "SIM" ? "Nº" : "-"}
+                      />
+                    </div>
+
+                  </div>
+
+                  {/* SEGUNDA LINHA: AÇÃO CORRETIVA E ASSINATURA (MAIS COMPACTAS) */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 pt-3 border-t border-slate-100 items-center">
+                    <div className="md:col-span-2">
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                        Ação Corretiva
+                      </label>
+                      <input
+                        type="text"
+                        disabled={row.houveVariacao !== "SIM"}
+                        value={row.acaoCorretiva || ""}
+                        onChange={(e) => updateBalancaRow(row.id, "acaoCorretiva", e.target.value)}
+                        className={`w-full border border-slate-200 p-2 rounded-xl text-xs outline-none transition-colors ${row.houveVariacao === "SIM" ? "bg-white text-slate-900 focus:border-amber-500" : "bg-slate-100 text-slate-400 cursor-not-allowed"}`}
+                        placeholder={row.houveVariacao === "SIM" ? "Descreva a ação corretiva..." : "N/A (Nenhuma variação registrada)"}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">
+                        Responsável
+                      </label>
+                      <div className={`border rounded-xl p-1 min-h-[38px] transition-colors ${row.responsavel ? "border-green-400 bg-white" : "border-slate-200 bg-slate-50"}`} onPointerDownCapture={prepareSignatureInteraction}>
+                        <SignatureSelector value={row.responsavel} onChange={(v) => updateBalancaRow(row.id, "responsavel", v)} />
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl shadow-sm">
+              <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">
+                OBS.: A listagem padrão agrupa todas as balanças ativas no mesmo bloco diário. Caso ocorra desvio em alguma unidade, preencha os dados da ocorrência.
+              </p>
             </div>
           </div>
         )}
-
         <div className="mt-8 flex justify-end">
           <button
             type="button"
@@ -452,7 +668,7 @@ export default function ManutencaoCalibracaoPage() {
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="sm:border-l sm:border-white/20 sm:pl-4 lg:pl-6">
-                <p className="text-slate-300 text-[10px] md:text-xs">Revisão por</p>
+                <p className="text-slate-300 text-[10px] md:text-xs">Revisado por</p>
                 <p className="text-amber-300 text-sm md:text-base font-black leading-tight">{COMPLIANCE_MANUTENCAO.revisedBy}</p>
                 <p className="text-slate-300 text-[10px] md:text-xs mt-0.5">Em: {COMPLIANCE_MANUTENCAO.revisionDate}</p>
               </div>

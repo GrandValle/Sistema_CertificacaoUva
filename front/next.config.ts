@@ -1,9 +1,8 @@
 import os from 'os';
 import type { NextConfig } from 'next';
 
-// 1. O sistema vasculha sua máquina e descobre qual é o seu IP de rede hoje
 const interfaces = os.networkInterfaces();
-const localIps: string[] = [];
+const localIps: string[] = ['localhost', '127.0.0.1'];
 
 for (const name of Object.keys(interfaces)) {
   const rede = interfaces[name];
@@ -16,10 +15,13 @@ for (const name of Object.keys(interfaces)) {
   }
 }
 
-// 2. Ele avisa pro Next.js: "Libere o acesso para esse IP dinâmico!"
+const uniqueIps = [...new Set(localIps)];
+
+console.log('🔧 Next.js allowedDevOrigins:', uniqueIps);
+
 const nextConfig: NextConfig = {
-  allowedDevOrigins: localIps,
-  // Se você tiver outras configurações no futuro, elas entram aqui embaixo
+  allowedDevOrigins: uniqueIps,
+  // outras configurações
 };
 
 export default nextConfig;
