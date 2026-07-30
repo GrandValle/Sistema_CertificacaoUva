@@ -1,6 +1,6 @@
 
-//const BASE_URL = "http://192.168.253.18:3019/api";
-const BASE_URL = "http://localhost:3019/api";
+const BASE_URL = "http://192.168.253.18:3019/api";
+//const BASE_URL = "http://localhost:3019/api";
 
 // ==========================================
 // 🛠️ MOTOR BASE (Faz o trabalho sujo de headers e erros)
