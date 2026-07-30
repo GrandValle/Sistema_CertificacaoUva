@@ -18,8 +18,8 @@ const app = express();
 app.use(cors());
 
 // Aumenta o limite para o back-end conseguir receber os Excels pesados
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: "1gb" }));
+app.use(express.urlencoded({ extended: true, limit: "1gb" }));
 
 app.use("/api/documentos", documentoRoutes);
 
@@ -34,13 +34,14 @@ app.use("/api/colaboradores-lavagem", colaboradorLavagemRoutes);
 app.use('/api/relatorios', relatorioRoutes);
 
 
+
 // Rota de teste
 app.get("/", (req, res) => {
     res.json({ message: "API rodando perfeitamente! 🍇🚀" });
 });
 
 // No final do seu arquivo do back-end
-const portNumber = Number(process.env.PORT || 3019);
+const portNumber = 3019;
 
 // A função listen aceita: (port, hostname, callback)
 app.listen(portNumber, () => {

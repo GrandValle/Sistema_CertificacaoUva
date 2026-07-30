@@ -6,8 +6,7 @@ const prisma = new PrismaClient();
 export class ColaboradorController {
     /**
      * Lista TODOS os colaboradores (Ativos e Desligados)
-     * Isso é necessário para o frontend conseguir reativar quem já saiu.
-     * Retorna apenas os campos essenciais: id, nome, numeroTesoura, tipo.
+     * Retorna campos essenciais + status e statusDetalhe.
      */
     async listar(req: Request, res: Response) {
         try {
@@ -17,6 +16,9 @@ export class ColaboradorController {
                     nome: true,
                     numeroTesoura: true,
                     tipo: true,
+                    statusTesoura: true,
+                    status: true,        // 🔥 ADICIONADO
+                    statusDetalhe: true, // 🔥 ADICIONADO
                 },
                 orderBy: { nome: "asc" },
             });
@@ -28,17 +30,24 @@ export class ColaboradorController {
     }
 
     /**
-     * Cria um novo colaborador com trava de duplicidade
-     * Retorna os dados essenciais do novo registro.
+     * Cria um novo colaborador com valores padrão para status e statusDetalhe.
      */
     async criar(req: Request, res: Response) {
         try {
             const { nome, numeroTesoura, tipo, observacao } = req.body;
-            if (!nome || !numeroTesoura || !tipo) {
-                return res.status(400).json({ error: "Nome, número da tesoura e tipo são obrigatórios." });
+
+            if (!nome || nome.trim() === '') {
+                return res.status(400).json({ error: "O campo Nome é obrigatório." });
+            }
+            if (!numeroTesoura || numeroTesoura.trim() === '') {
+                return res.status(400).json({ error: "O campo Nº Tesoura é obrigatório." });
+            }
+            if (!tipo) {
+                return res.status(400).json({ error: "O campo Tipo é obrigatório." });
             }
 
             const nomeFormatado = nome.trim().toUpperCase();
+            const numeroFormatado = numeroTesoura.trim();
 
             const colaboradorExistente = await prisma.colaboradorTesoura.findFirst({
                 where: { nome: nomeFormatado }
@@ -50,18 +59,37 @@ export class ColaboradorController {
                 });
             }
 
+            const tesouraOcupada = await prisma.colaboradorTesoura.findFirst({
+                where: {
+                    numeroTesoura: numeroFormatado,
+                    statusTesoura: "EM_USO"
+                }
+            });
+
+            if (tesouraOcupada) {
+                return res.status(400).json({
+                    error: `O Nº Tesoura ${numeroFormatado} já está em uso por ${tesouraOcupada.nome}.`
+                });
+            }
+
             const novo = await prisma.colaboradorTesoura.create({
                 data: {
                     nome: nomeFormatado,
-                    numeroTesoura,
+                    numeroTesoura: numeroFormatado,
                     tipo,
-                    observacao: observacao || ""
+                    observacao: observacao || "",
+                    statusTesoura: "EM_USO",
+                    status: "NORMAL",        // 🔥 ADICIONADO
+                    statusDetalhe: "NORMAL", // 🔥 ADICIONADO
                 },
                 select: {
                     id: true,
                     nome: true,
                     numeroTesoura: true,
                     tipo: true,
+                    statusTesoura: true,
+                    status: true,
+                    statusDetalhe: true,
                 }
             });
             return res.status(201).json(novo);
@@ -72,15 +100,22 @@ export class ColaboradorController {
     }
 
     /**
-     * Atualiza os dados de um colaborador (Usado também para REATIVAR)
-     * Retorna os dados essenciais atualizados.
+     * Atualiza os dados de um colaborador, incluindo status e statusDetalhe.
+     * Retorna os dados atualizados.
      */
     async atualizar(req: Request, res: Response) {
         try {
             const { id } = req.params;
             const colaboradorId = Array.isArray(id) ? id[0] : id;
 
-            const { nome, numeroTesoura, tipo, observacao } = req.body;
+            const { nome, numeroTesoura, tipo, observacao, statusTesoura, status, statusDetalhe } = req.body;
+
+            if (nome !== undefined && (!nome || nome.trim() === '')) {
+                return res.status(400).json({ error: "O campo Nome não pode ficar vazio." });
+            }
+            if (numeroTesoura !== undefined && (!numeroTesoura || numeroTesoura.trim() === '')) {
+                return res.status(400).json({ error: "O campo Nº Tesoura não pode ficar vazio." });
+            }
 
             const colaboradorExistente = await prisma.colaboradorTesoura.findUnique({
                 where: { id: colaboradorId },
@@ -90,19 +125,50 @@ export class ColaboradorController {
                 return res.status(404).json({ error: "Colaborador não encontrado." });
             }
 
+            const numeroFinal = numeroTesoura !== undefined ? numeroTesoura.trim() : colaboradorExistente.numeroTesoura;
+
+            if (numeroFinal !== colaboradorExistente.numeroTesoura) {
+                const tesouraOcupada = await prisma.colaboradorTesoura.findFirst({
+                    where: {
+                        numeroTesoura: numeroFinal,
+                        id: { not: colaboradorId },
+                        statusTesoura: "EM_USO"
+                    }
+                });
+
+                if (tesouraOcupada) {
+                    return res.status(400).json({
+                        error: `O Nº Tesoura ${numeroFinal} já está em uso por ${tesouraOcupada.nome}.`
+                    });
+                }
+            }
+
+            const nomeFinal = nome !== undefined ? nome.trim().toUpperCase() : colaboradorExistente.nome;
+            const tipoFinal = tipo !== undefined ? tipo : colaboradorExistente.tipo;
+            const obsFinal = observacao !== undefined ? observacao : colaboradorExistente.observacao;
+            const statusTesouraFinal = statusTesoura !== undefined ? statusTesoura : colaboradorExistente.statusTesoura;
+            const statusFinal = status !== undefined ? status : (colaboradorExistente as any).status;
+            const statusDetalheFinal = statusDetalhe !== undefined ? statusDetalhe : (colaboradorExistente as any).statusDetalhe;
+
             const atualizado = await prisma.colaboradorTesoura.update({
                 where: { id: colaboradorId },
                 data: {
-                    nome: nome !== undefined ? nome.trim().toUpperCase() : colaboradorExistente.nome,
-                    numeroTesoura: numeroTesoura !== undefined ? numeroTesoura : colaboradorExistente.numeroTesoura,
-                    tipo: tipo !== undefined ? tipo : colaboradorExistente.tipo,
-                    observacao: observacao !== undefined ? observacao : colaboradorExistente.observacao,
+                    nome: nomeFinal,
+                    numeroTesoura: numeroFinal,
+                    tipo: tipoFinal,
+                    observacao: obsFinal,
+                    statusTesoura: statusTesouraFinal,
+                    status: statusFinal,
+                    statusDetalhe: statusDetalheFinal,
                 },
                 select: {
                     id: true,
                     nome: true,
                     numeroTesoura: true,
                     tipo: true,
+                    statusTesoura: true,
+                    status: true,
+                    statusDetalhe: true,
                 }
             });
             return res.status(200).json(atualizado);
@@ -113,8 +179,8 @@ export class ColaboradorController {
     }
 
     /**
-     * Soft Delete: marca o colaborador como "DESLIGADO"
-     * Retorna os dados essenciais do colaborador desligado.
+     * Soft Delete: marca o colaborador como "DESLIGADO" e devolve a tesoura.
+     * Opcionalmente atualiza statusDetalhe para "DESLIGADO".
      */
     async desligar(req: Request, res: Response) {
         try {
@@ -134,12 +200,20 @@ export class ColaboradorController {
 
             const desligado = await prisma.colaboradorTesoura.update({
                 where: { id: colaboradorId },
-                data: { tipo: "DESLIGADA" },
+                data: {
+                    tipo: "DESLIGADA",
+                    statusTesoura: "DEVOLVIDA",
+                    status: "NORMAL",          // Mantém ou define como NORMAL
+                    statusDetalhe: "DESLIGADO" // Opcional: indica o motivo do desligamento
+                },
                 select: {
                     id: true,
                     nome: true,
                     numeroTesoura: true,
                     tipo: true,
+                    statusTesoura: true,
+                    status: true,
+                    statusDetalhe: true,
                 }
             });
             return res.status(200).json(desligado);

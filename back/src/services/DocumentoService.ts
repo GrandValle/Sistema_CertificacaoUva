@@ -3,10 +3,6 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 export class DocumentoService {
-
-    // ============================================================================
-    // 1. SALVAR GENÉRICO
-    // ============================================================================
     async salvarGenerico(
         tipoTela: string,
         dados: any,
@@ -25,17 +21,17 @@ export class DocumentoService {
 
         const dataAtual = new Date().toISOString().split("T")[0];
         const limpar = (str: string) => str
-            ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\W+/g, '_').toLowerCase()
+            ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\W+/g, "_").toLowerCase()
             : "documento";
 
-        const nomePadronizado = `${limpar(tipoTela)}_${limpar(dados.aba || "sem_area")}_${dataAtual}.xlsx`;
+        const nomePadronizado = `${limpar(tipoTela)}_${limpar(dados.aba || dados.setor || dados.area || "sem_area")}_${dataAtual}.xlsx`;
 
         return await prisma.$transaction(async (tx) => {
             let registroId = "";
             let campoRelacao = "";
 
             switch (tipoTela) {
-                case "controle_acesso":
+                case "controle_acesso": {
                     const acesso = await tx.controleAcesso.create({
                         data: {
                             mes: dados.mes,
@@ -47,8 +43,9 @@ export class DocumentoService {
                     registroId = acesso.id;
                     campoRelacao = "controleAcessoId";
                     break;
+                }
 
-                case "manutencao_calibracao":
+                case "manutencao_calibracao": {
                     const mc = await tx.manutencaoCalibracao.create({
                         data: {
                             mes: dados.mes,
@@ -61,8 +58,9 @@ export class DocumentoService {
                     registroId = mc.id;
                     campoRelacao = "manutencaoCalibracaoId";
                     break;
+                }
 
-                case "conduta_higiene":
+                case "conduta_higiene": {
                     const ch = await tx.condutaHigiene.create({
                         data: {
                             semana: dados.semana,
@@ -74,8 +72,9 @@ export class DocumentoService {
                     registroId = ch.id;
                     campoRelacao = "condutaHigieneId";
                     break;
+                }
 
-                case "controle_qualidade":
+                case "controle_qualidade": {
                     const cq = await tx.controleQualidade.create({
                         data: {
                             mes: dados.mes,
@@ -88,8 +87,9 @@ export class DocumentoService {
                     registroId = cq.id;
                     campoRelacao = "controleQualidadeId";
                     break;
+                }
 
-                case "estoque_material":
+                case "estoque_material": {
                     const em = await tx.estoqueMaterial.create({
                         data: {
                             mes: dados.mes,
@@ -101,8 +101,9 @@ export class DocumentoService {
                     registroId = em.id;
                     campoRelacao = "estoqueMaterialId";
                     break;
+                }
 
-                case "inspecao_operacional":
+                case "inspecao_operacional": {
                     const io = await tx.inspecaoOperacional.create({
                         data: {
                             mes: dados.mes,
@@ -115,8 +116,9 @@ export class DocumentoService {
                     registroId = io.id;
                     campoRelacao = "inspecaoOperacionalId";
                     break;
+                }
 
-                case "higienizacao_geral":
+                case "higienizacao_geral": {
                     const hg = await tx.higienizacaoGeral.upsert({
                         where: {
                             setor_mes_ano_frequencia: {
@@ -143,8 +145,9 @@ export class DocumentoService {
                     registroId = hg.id;
                     campoRelacao = "higienizacaoGeralId";
                     break;
+                }
 
-                case "questionario_visitante":
+                case "questionario_visitante": {
                     const qv = await tx.questionarioVisitante.create({
                         data: {
                             data: dados.data,
@@ -158,6 +161,7 @@ export class DocumentoService {
                     registroId = qv.id;
                     campoRelacao = "questionarioVisitanteId";
                     break;
+                }
 
                 default:
                     throw new Error(`Tipo de tela desconhecido: ${tipoTela}`);
@@ -176,9 +180,6 @@ export class DocumentoService {
         });
     }
 
-    // ============================================================================
-    // 2. LISTAR HISTÓRICO
-    // ============================================================================
     async listarHistorico(tipoTela: string) {
         const includeDocumentos = {
             documentos: {
@@ -236,18 +237,12 @@ export class DocumentoService {
         }
     }
 
-    // ============================================================================
-    // 3. DOWNLOAD DO DOCUMENTO
-    // ============================================================================
     async baixarDocumento(idArquivo: string) {
         return await prisma.documentoExportado.findUnique({
             where: { id: idArquivo },
         });
     }
 
-    // ============================================================================
-    // 4. MÉTODOS DE EXCLUSÃO (todos com os campos corretos do schema)
-    // ============================================================================
     async deletarControleAcesso(id: string) {
         await prisma.documentoExportado.deleteMany({ where: { controleAcessoId: id } });
         return await prisma.controleAcesso.delete({ where: { id } });
@@ -284,11 +279,10 @@ export class DocumentoService {
     }
 
     async deletarHigienizacaoGeral(id: string) {
-        // Deleta todos os documentos vinculados a esse pai
         await prisma.documentoExportado.deleteMany({
-            where: { higienizacaoGeralId: id }
+            where: { higienizacaoGeralId: id },
         });
-        // Deleta o pai
+
         return await prisma.higienizacaoGeral.delete({ where: { id } });
     }
 }

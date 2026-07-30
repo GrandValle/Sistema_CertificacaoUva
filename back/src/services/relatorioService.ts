@@ -5,7 +5,7 @@ import AdmZip from 'adm-zip';
 const prisma = new PrismaClient();
 
 // ==========================================
-// 📋 CONFIGURAÇÃO DOS MÓDULOS (ÚNICO LUGAR PARA ADICIONAR NOVOS)
+// 📋 CONFIGURAÇÃO DOS MÓDULOS
 // ==========================================
 
 interface ModuloConfig {
@@ -31,20 +31,29 @@ const MODULO_TIPO_MAP: Record<string, string> = Object.fromEntries(
 );
 
 // ==========================================
-// 📊 BUSCAR RELATÓRIOS UNIFICADOS
+// 📊 BUSCAR RELATÓRIOS UNIFICADOS (LEVE PARA A TELA)
 // ==========================================
 
-export const buscarRelatoriosUnificados = async (inicio?: Date, fim?: Date) => {
+export const buscarRelatoriosUnificados = async (inicio?: Date, fim?: Date, incluirBinario: boolean = false) => {
     const filtroData = inicio && fim ? { criadoEm: { gte: inicio, lte: fim } } : {};
+
+    // 1. Criamos a lista APENAS com campos leves. 
+    // A palavra 'conteudo' nem existe aqui, então o Prisma nunca vai buscar!
+    const camposDocumento: any = {
+        id: true,
+        nomeArquivo: true,
+        tipoMime: true,
+        criadoEm: true,
+    };
+
+    // 2. Só injetamos a ordem para buscar o binário se for para gerar o ZIP
+    if (incluirBinario) {
+        camposDocumento.conteudo = true;
+    }
+
     const includeDocumentos = {
         documentos: {
-            select: {
-                id: true,
-                nomeArquivo: true,
-                tipoMime: true,
-                conteudo: true,
-                criadoEm: true
-            }
+            select: camposDocumento
         }
     };
 
@@ -74,7 +83,8 @@ export const buscarRelatoriosUnificados = async (inicio?: Date, fim?: Date) => {
 // ==========================================
 
 export const gerarZipRelatorios = async (inicio?: Date, fim?: Date, modulo?: string): Promise<Buffer> => {
-    const dados = await buscarRelatoriosUnificados(inicio, fim);
+    // 🟢 Aqui passamos 'true' para forçar o Prisma a trazer o conteúdo binário apenas na hora de baixar o ZIP
+    const dados = await buscarRelatoriosUnificados(inicio, fim, true);
 
     let todosDocumentos: Array<{ id: string; nomeArquivo: string; conteudo: Buffer; criadoEm: Date; tipo: string }> = [];
     for (const mod of MODULOS) {
@@ -105,14 +115,12 @@ export const gerarZipRelatorios = async (inicio?: Date, fim?: Date, modulo?: str
         throw new Error(`Nenhum documento encontrado para ${modulo ? 'o módulo ' + modulo : 'o período selecionado'}.`);
     }
 
-    // 🔥 Usando adm-zip para gerar o arquivo na memória
     const zip = new AdmZip();
     const usedNames: Record<string, number> = {};
 
     documentosFiltrados.forEach((doc) => {
         let fileName = doc.nomeArquivo;
 
-        // Evita nomes duplicados de arquivos dentro do ZIP
         if (usedNames[fileName]) {
             const parts = fileName.split('.');
             const ext = parts.pop();
@@ -122,10 +130,8 @@ export const gerarZipRelatorios = async (inicio?: Date, fim?: Date, modulo?: str
             usedNames[fileName] = 1;
         }
 
-        // Adiciona o arquivo diretamente na memória do ZIP
         zip.addFile(fileName, doc.conteudo);
     });
 
-    // Retorna o Buffer pronto para ser enviado ao Controller e baixado pelo usuário
     return zip.toBuffer();
 };

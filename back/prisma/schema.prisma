@@ -162,13 +162,14 @@ model ProcedimentoOperacional {
 }
 
 model ColaboradorOculos {
-  id           String           @id @default(uuid())
-  nome         String
-  tipo         String
-  status       String           @default("ATIVO")
-  criadoEm     DateTime         @default(now())
-  atualizadoEm DateTime         @updatedAt
-  registros    RegistroOculos[]
+  id            String           @id @default(uuid())
+  nome          String
+  tipo          String
+  status        String           @default("NORMAL")
+  statusDetalhe String? // 🔥 ADICIONE ESTE CAMPO (String opcional)
+  criadoEm      DateTime         @default(now())
+  atualizadoEm  DateTime         @updatedAt
+  registros     RegistroOculos[]
 
   @@map("colaboradores_oculos")
 }
@@ -198,6 +199,9 @@ model ColaboradorTesoura {
   nome          String
   numeroTesoura String
   tipo          String
+  status        String               @default("NORMAL")
+  statusDetalhe String? // 🔥 ADICIONE ESTE CAMPO
+  statusTesoura String               @default("EM_USO")
   observacao    String?
   criadoEm      DateTime             @default(now())
   atualizadoEm  DateTime             @updatedAt
@@ -207,10 +211,18 @@ model ColaboradorTesoura {
 }
 
 model ColaboradorLavagem {
-  id           String   @id @default(uuid())
-  nome         String
-  tipo         String   @default("EFETIVO") // "EFETIVO" ou "CONTRATADO"
-  ativo        Boolean  @default(true)
+  id   String @id @default(uuid())
+  nome String
+  tipo String @default("EFETIVO")
+
+  // 🔥 MUDANÇA: Em vez de apagar, deixamos o 'ativo' opcional (Boolean?)
+  // Assim ele continua no banco, mas não é mais obrigatório para novos registros.
+  ativo Boolean?
+
+  // Adicionamos os novos campos como você queria
+  status        String  @default("NORMAL")
+  statusDetalhe String?
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 

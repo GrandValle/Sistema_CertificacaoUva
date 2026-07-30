@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 export class ColaboradorLavagemController {
     // Listar TODOS os colaboradores (removido o filtro de apenas ativos)
-    // Retorna apenas id, nome, tipo, ativo, e um campo textual 'status'
+    // Retorna id, nome, tipo, ativo, status, statusDetalhe
     async listar(req: Request, res: Response) {
         try {
             const colaboradores = await prisma.colaboradorLavagem.findMany({
@@ -14,16 +14,15 @@ export class ColaboradorLavagemController {
                     nome: true,
                     tipo: true,
                     ativo: true,
+                    status: true,        // 🔥 ADICIONAR
+                    statusDetalhe: true, // 🔥 ADICIONAR
                 },
                 orderBy: { nome: "asc" },
             });
 
-            const resultado = colaboradores.map(c => ({
-                ...c,
-                status: c.ativo ? "Ativo" : "Desligado"
-            }));
-
-            res.json(resultado);
+            // 🔥 Agora retornamos os campos diretamente, sem mapear
+            // O frontend usará statusDetalhe para a situação (NORMAL, FÉRIAS, etc.)
+            res.json(colaboradores);
         } catch (error) {
             console.error("Erro ao listar colaboradores:", error);
             res.status(500).json({ erro: "Erro ao listar colaboradores" });
@@ -55,12 +54,16 @@ export class ColaboradorLavagemController {
                     nome: nomeFormatado,
                     tipo: tipo === "CONTRATADO" ? "CONTRATADO" : "EFETIVO",
                     ativo: ativo !== undefined ? Boolean(ativo) : true,
+                    status: "NORMAL",        // 🔥 ADICIONAR
+                    statusDetalhe: "NORMAL", // 🔥 ADICIONAR
                 },
                 select: {
                     id: true,
                     nome: true,
                     tipo: true,
                     ativo: true,
+                    status: true,
+                    statusDetalhe: true,
                 }
             });
             res.status(201).json(colaborador);
@@ -77,7 +80,7 @@ export class ColaboradorLavagemController {
                 return res.status(400).json({ erro: "ID inválido" });
             }
 
-            const { nome, tipo, ativo } = req.body;
+            const { nome, tipo, ativo, status, statusDetalhe } = req.body;
 
             const data: any = {};
             if (nome !== undefined) {
@@ -95,6 +98,12 @@ export class ColaboradorLavagemController {
             if (ativo !== undefined) {
                 data.ativo = Boolean(ativo);
             }
+            if (status !== undefined) {
+                data.status = status;
+            }
+            if (statusDetalhe !== undefined) {
+                data.statusDetalhe = statusDetalhe;
+            }
 
             if (Object.keys(data).length === 0) {
                 return res.status(400).json({ erro: "Nenhum campo para atualizar" });
@@ -108,6 +117,8 @@ export class ColaboradorLavagemController {
                     nome: true,
                     tipo: true,
                     ativo: true,
+                    status: true,
+                    statusDetalhe: true,
                 }
             });
             res.json(colaborador);
@@ -135,6 +146,8 @@ export class ColaboradorLavagemController {
                     nome: true,
                     tipo: true,
                     ativo: true,
+                    status: true,
+                    statusDetalhe: true,
                 }
             });
             res.json({ mensagem: "Colaborador desativado", colaborador });
@@ -162,6 +175,8 @@ export class ColaboradorLavagemController {
                     nome: true,
                     tipo: true,
                     ativo: true,
+                    status: true,
+                    statusDetalhe: true,
                 }
             });
             res.json({ mensagem: "Colaborador reativado", colaborador });

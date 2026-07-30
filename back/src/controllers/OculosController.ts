@@ -4,9 +4,10 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 export class OculosController {
-    // LISTAR TODOS (ativos e inativos) para permitir reativação
-    // Retorna apenas id, nome, tipo, status
-    async listar(req: Request, res: Response) {
+    /**
+     * LISTAR TODOS (ativos e inativos) – necessário para reativação.
+     */
+    listar = async (req: Request, res: Response) => {
         try {
             const colaboradores = await prisma.colaboradorOculos.findMany({
                 select: {
@@ -14,6 +15,7 @@ export class OculosController {
                     nome: true,
                     tipo: true,
                     status: true,
+                    statusDetalhe: true,
                 },
                 orderBy: { nome: "asc" },
             });
@@ -24,8 +26,10 @@ export class OculosController {
         }
     }
 
-    // CRIAR com trava de duplicidade
-    async criar(req: Request, res: Response) {
+    /**
+     * CRIAR novo colaborador com trava de duplicidade.
+     */
+    criar = async (req: Request, res: Response) => {
         try {
             const { nome, tipo } = req.body;
             if (!nome || !tipo) {
@@ -48,13 +52,15 @@ export class OculosController {
                 data: {
                     nome: nomeFormatado,
                     tipo,
-                    status: "ATIVO"
+                    status: "ATIVO",
+                    statusDetalhe: "NORMAL",
                 },
                 select: {
                     id: true,
                     nome: true,
                     tipo: true,
                     status: true,
+                    statusDetalhe: true,
                 }
             });
             return res.status(201).json(novo);
@@ -64,8 +70,10 @@ export class OculosController {
         }
     }
 
-    // DESATIVAR (soft delete)
-    async desativar(req: Request, res: Response) {
+    /**
+     * DESATIVAR (soft delete).
+     */
+    desativar = async (req: Request, res: Response) => {
         try {
             const { id } = req.params as { id: string };
 
@@ -77,6 +85,7 @@ export class OculosController {
                     nome: true,
                     tipo: true,
                     status: true,
+                    statusDetalhe: true,
                 }
             });
             return res.status(200).json(desativado);
@@ -86,14 +95,19 @@ export class OculosController {
         }
     }
 
-    // ATUALIZAR TIPO (e opcionalmente reativar/editar nome)
-    // Este método é chamado tanto para atualização de tipo quanto para reativação (status)
-    async atualizarTipo(req: Request, res: Response) {
+    /**
+     * ATUALIZAR dados do colaborador.
+     */
+    atualizar = async (req: Request, res: Response) => {
         try {
             const { id } = req.params as { id: string };
-            const { tipo, status, nome } = req.body;
+            const { nome, tipo, status, statusDetalhe, situacao } = req.body;
 
             const dataToUpdate: any = {};
+
+            if (nome) {
+                dataToUpdate.nome = nome.trim().toUpperCase();
+            }
 
             if (tipo) {
                 if (!["EFETIVO", "CONTRATADO"].includes(tipo)) {
@@ -102,12 +116,17 @@ export class OculosController {
                 dataToUpdate.tipo = tipo;
             }
 
-            if (status) {
+            if (status && ["ATIVO", "INATIVO"].includes(status)) {
                 dataToUpdate.status = status;
             }
 
-            if (nome) {
-                dataToUpdate.nome = nome.trim().toUpperCase();
+            const novoDetalhe = statusDetalhe !== undefined ? statusDetalhe : situacao;
+            if (novoDetalhe !== undefined) {
+                dataToUpdate.statusDetalhe = novoDetalhe;
+            }
+
+            if (Object.keys(dataToUpdate).length === 0) {
+                dataToUpdate.statusDetalhe = "NORMAL";
             }
 
             const atualizado = await prisma.colaboradorOculos.update({
@@ -118,6 +137,7 @@ export class OculosController {
                     nome: true,
                     tipo: true,
                     status: true,
+                    statusDetalhe: true,
                 }
             });
 
@@ -127,7 +147,14 @@ export class OculosController {
             if (error.code === "P2025") {
                 return res.status(404).json({ error: "Colaborador não encontrado." });
             }
-            return res.status(500).json({ error: "Erro interno ao atualizar dados." });
+            return res.status(500).json({ error: error.message || "Erro interno ao atualizar dados." });
         }
+    }
+
+    /**
+     * Compatibilidade
+     */
+    atualizarTipo = async (req: Request, res: Response) => {
+        return this.atualizar(req, res);
     }
 }
